@@ -114,11 +114,11 @@ impl Component for Model {
         //     .callback(|e: InputData| Msg::Add(e.value.parse::<i64>().map_or(0, |i| i)));
 
         let to_html = |action: &common::game::Action| match action {
-            common::game::Action::AddPlayer(id, _) => {
+            common::game::Action::Join(id, _) => {
                 let cloned_id: usize = *id;
                 let send_name = move |e: ChangeData| match e {
                     ChangeData::Value(value) => {
-                        Msg::WsSend(common::game::Action::AddPlayer(cloned_id, value))
+                        Msg::WsSend(common::game::Action::Join(cloned_id, value))
                     }
                     _ => Msg::Ignore,
                 };
@@ -127,6 +127,13 @@ impl Component for Model {
                             <label for="uname">{ "Choose a username:" }</label>
                             <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
                         </div>
+                }
+            }
+            common::game::Action::DisconnectPlayer(_id) => {
+                html! {
+                    <div>
+                        { "Something weird happened, we should never get disconnect as an action here" }
+                    </div>
                 }
             }
             common::game::Action::Play(turn) => {
@@ -159,27 +166,63 @@ impl Component for Model {
             .iter()
             .map(|action| to_html(action))
             .collect::<Vec<Html>>();
-        html! {
-            <div>
-                <p>
-                    { state }
-                </p>
-                <p>
-                    { action_html }
-                </p>
-                <p>
-                    <button disabled=self.ws.is_some()
-                        onclick=self.link.callback(|_| WsAction::Connect)>
-                        { "Connect to WebSocket" }
-                    </button>
-                </p>
-                <p>
-                    <button disabled=self.ws.is_none()
-                        onclick=self.link.callback(|_| WsAction::Disconnect)>
-                        { "Disconnect from WebSocket" }
-                    </button>
-                </p>
-            </div>
+
+        let state_html = match &self.state.me {
+            Some(my_player) => {
+                html! {
+                    { format!("You are player {}.", my_player.name) }
+                }
+            }
+            None => {
+                let list_players = if self.state.state.players.len() > 0 {
+                    html! {
+                        <p>
+                            { "The following players take part in the game:" }
+                            <ul class="item-list">
+                                { for self.state.state.players.iter().map(|p|{ p.name.clone() }) }
+                            </ul>
+                        </p>
+                    }
+                } else {
+                    html! {
+                        <p>
+                            { "There are no players yet" }
+                        </p>
+                    }
+                };
+                html! {
+                    <>
+                    <p>
+                        { "Would you like to join the game?" }
+                    </p>
+                        { list_players }
+                    </>
+                }
+            }
+        };
+
+        if self.ws.is_none() {
+            html! {
+                <div>
+                <button onclick=self.link.callback(|_| WsAction::Connect)>
+                { "connect" }
+                </button>
+                </div>
+            }
+        } else {
+            html! {
+                <div>
+                    <p>
+                        { state }
+                    </p>
+                    <p>
+                        { state_html }
+                    </p>
+                    <p>
+                        { action_html }
+                    </p>
+                </div>
+            }
         }
     }
 }

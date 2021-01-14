@@ -3,8 +3,8 @@ pub mod game {
 
     #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Clone)]
     pub struct Player {
-        id: usize,
-        name: String,
+        id: Option<usize>,
+        pub name: String,
     }
 
     #[derive(Eq, PartialEq, Serialize, Deserialize, Debug)]
@@ -15,15 +15,16 @@ pub mod game {
 
     #[derive(Eq, PartialEq, Serialize, Deserialize, Debug)]
     pub enum Action {
-        AddPlayer(usize, String),
+        Join(usize, String),
+        DisconnectPlayer(usize),
         Play(Turn),
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
     pub struct State {
-        players: Vec<Player>,
-        active_index: Option<usize>,
-        value: i64,
+        pub players: Vec<Player>,
+        pub active_index: Option<usize>,
+        pub value: i64,
     }
 
     #[derive(Serialize, Deserialize, Debug, Default)]
@@ -44,17 +45,31 @@ pub mod game {
 
         pub fn action(&mut self, action: &Action) -> Option<()> {
             match action {
-                Action::AddPlayer(new_id, new_name) => self.add_player(*new_id, new_name),
+                Action::Join(new_id, new_name) => self.join(*new_id, new_name),
+                Action::DisconnectPlayer(id) => self.disconnect_player(*id),
                 Action::Play(turn) => self.play(turn),
             }
         }
 
-        pub fn add_player(&mut self, new_id: usize, new_name: &str) -> Option<()> {
-            match self.players.iter().position(|p| p.name == new_name) {
-                Some(_) => None,
+        pub fn disconnect_player(&mut self, disconnect_id: usize) -> Option<()> {
+            self.players
+                .iter_mut()
+                .find(|p| p.id == Some(disconnect_id))?
+                .id = None;
+            Some(())
+        }
+
+        pub fn join(&mut self, new_id: usize, new_name: &str) -> Option<()> {
+            match self.players.iter_mut().find(|p| p.name == new_name) {
+                Some(player) => {
+                    if player.id.is_none() {
+                        player.id = Some(new_id);
+                    }
+                    Some(())
+                }
                 None => {
                     self.players.push(Player {
-                        id: new_id,
+                        id: Some(new_id),
                         name: new_name.to_string(),
                     });
                     if self.active_index.is_none() {
@@ -66,7 +81,7 @@ pub mod game {
         }
 
         fn player_index(&self, id: usize) -> Option<usize> {
-            self.players.iter().position(|p| p.id == id)
+            self.players.iter().position(|p| p.id == Some(id))
         }
 
         pub fn play(&mut self, turn: &Turn) -> Option<()> {
@@ -93,7 +108,7 @@ pub mod game {
                     }
                 }
                 None => {
-                    vec![Action::AddPlayer(id, String::new())]
+                    vec![Action::Join(id, String::new())]
                 }
             }
         }

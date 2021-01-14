@@ -64,15 +64,6 @@ async fn user_connected(websocket: WebSocket, users: models::Users, state: model
     users.write().await.insert(my_id, tx);
 
     notify_all(&users, &state).await;
-    // for (id, tx) in users.write().await.iter() {
-    //     let view = state.lock().await.get_view(*id);
-    //     let view_json = serde_json::to_string(&view).unwrap();
-    //     if let Err(_disconnected) = tx.send(Ok(Message::text(view_json))) {
-    //         // The tx is disconnected, our `user_disconnected` code
-    //         // should be happening in another task, nothing more to
-    //         // do here.
-    //     }
-    // }
 
     // Return a `Future` that is basically a state machine managing
     // this specific user's connection.
@@ -90,15 +81,6 @@ async fn user_connected(websocket: WebSocket, users: models::Users, state: model
             }
         };
         user_message(my_id, msg, &users, &state).await;
-        // for (id, tx) in users.write().await.iter() {
-        //     let view = state.lock().await.get_view(*id);
-        //     let view_json = serde_json::to_string(&view).unwrap();
-        //     if let Err(_disconnected) = tx.send(Ok(Message::text(view_json))) {
-        //         // The tx is disconnected, our `user_disconnected` code
-        //         // should be happening in another task, nothing more to
-        //         // do here.
-        //     }
-        // }
     }
 
     // user_ws_rx stream will keep processing as long as the user stays
@@ -134,36 +116,13 @@ async fn user_message(my_id: usize, msg: Message, users: &models::Users, state: 
             eprintln!("error in deserializing: {:?}", e)
         }
     }
+    if msg.is_close() {
+        eprintln!("marking id {} as disconnected", my_id);
+        let disconnect = common::game::Action::DisconnectPlayer(my_id);
+        state.lock().await.action(&disconnect);
+    }
 
     notify_all(users, state).await
-
-    // let my_view = state.lock().await.get_view(my_id);
-    // let view_json = serde_json::to_string(&my_view).unwrap();
-    // if let Err(_disconnected) = tx.send(Ok(Message::text(view_json))) {
-    //     // The tx is disconnected, our `user_disconnected` code
-    //     // should be happening in another task, nothing more to
-    //     // do here.
-    // }
-
-    // // Skip any non-Text messages...
-    // let msg = if let Ok(s) = msg.to_str() {
-    //     s
-    // } else {
-    //     return;
-    // };
-
-    // let new_msg = format!("<User#{}>: {}", my_id, msg);
-
-    // // New message from this user, send it to everyone else (except same uid)...
-    // for (&uid, tx) in users.read().await.iter() {
-    //     if my_id != uid {
-    //         if let Err(_disconnected) = tx.send(Ok(Message::text(new_msg.clone()))) {
-    //             // The tx is disconnected, our `user_disconnected` code
-    //             // should be happening in another task, nothing more to
-    //             // do here.
-    //         }
-    //     }
-    // }
 }
 
 async fn user_disconnected(my_id: usize, users: &models::Users) {
@@ -176,11 +135,6 @@ async fn user_disconnected(my_id: usize, users: &models::Users) {
 mod handlers {
     use super::models::State;
     use std::convert::Infallible;
-
-    pub async fn return_state(state: State) -> Result<impl warp::Reply, Infallible> {
-        let s = state.lock().await;
-        Ok(warp::reply::json(&*s))
-    }
 }
 
 mod models {
