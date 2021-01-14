@@ -136,27 +136,17 @@ impl Component for Model {
                     </div>
                 }
             }
-            common::game::Action::Play(turn) => {
-                let cloned_id: usize = turn.id;
-                let send_turn = move |e: ChangeData| match e {
-                    ChangeData::Value(value) => match value.parse::<i64>() {
-                        Ok(new_value) => {
-                            Msg::WsSend(common::game::Action::Play(common::game::Turn {
-                                id: cloned_id,
-                                new_value: new_value,
-                            }))
-                        }
-                        Err(_) => Msg::Ignore,
-                    },
-                    _ => Msg::Ignore,
-                };
+            _ => {
                 html! {
                     <div>
-                        <label for="value">{ "Make your turn:" }</label>
-                        <input type="number" id="value" name="value" onchange=self.link.callback(send_turn)/>
+                        { "html for actions not yet implemented" }
                     </div>
                 }
-            }
+            } // common::game::Action::GiveHint(_, _) => {}
+              // common::game::Action::FilterHint(_, _, _) => {}
+              // common::game::Action::FinishHintFiltering(_) => {}
+              // common::game::Action::Judge(_, _) => {}
+              // common::game::Action::FinishJudging(_) => {}
         };
 
         let state = format!("{:?}", self.state);
@@ -174,12 +164,12 @@ impl Component for Model {
                 }
             }
             None => {
-                let list_players = if self.state.state.players.len() > 0 {
+                let list_players = if self.state.players.len() > 0 {
                     html! {
                         <p>
                             { "The following players take part in the game:" }
                             <ul class="item-list">
-                                { for self.state.state.players.iter().map(|p|{ p.name.clone() }) }
+                                { for self.state.players.iter().map(|p|{ p.name.clone() }) }
                             </ul>
                         </p>
                     }
