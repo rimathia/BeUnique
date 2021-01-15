@@ -109,10 +109,6 @@ impl Component for Model {
     }
 
     fn view(&self) -> Html {
-        // let oninput = self
-        //     .link
-        //     .callback(|e: InputData| Msg::Add(e.value.parse::<i64>().map_or(0, |i| i)));
-
         let to_html = |action: &common::game::Action| match action {
             common::game::Action::Join(id, _) => {
                 let cloned_id: usize = *id;
@@ -124,7 +120,7 @@ impl Component for Model {
                 };
                 html! {
                         <div>
-                            <label for="uname">{ "Choose a username:" }</label>
+                            <label for="uname">{ "Mein Name:" }</label>
                             <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
                         </div>
                 }
@@ -132,24 +128,116 @@ impl Component for Model {
             common::game::Action::DisconnectPlayer(_id) => {
                 html! {
                     <div>
-                        { "Something weird happened, we should never get disconnect as an action here" }
+                        { "Das sollte nicht passieren (Verbindung explizit getrennt). Bitte neu laden." }
                     </div>
                 }
             }
-            _ => {
+            common::game::Action::Start(id) => {
+                let cloned_id: usize = *id;
+                let send_start = move |_| Msg::WsSend(common::game::Action::Start(cloned_id));
                 html! {
                     <div>
-                        { "html for actions not yet implemented" }
+                        <button onclick=self.link.callback(send_start)>
+                        {"Start"}
+                        </button>
                     </div>
                 }
-            } // common::game::Action::GiveHint(_, _) => {}
-              // common::game::Action::FilterHint(_, _, _) => {}
-              // common::game::Action::FinishHintFiltering(_) => {}
-              // common::game::Action::Judge(_, _) => {}
-              // common::game::Action::FinishJudging(_) => {}
+            }
+            common::game::Action::GiveHint(id, _hint) => {
+                let cloned_id: usize = *id;
+                let send_hint = move |e: ChangeData| match e {
+                    ChangeData::Value(value) => {
+                        Msg::WsSend(common::game::Action::GiveHint(cloned_id, value))
+                    }
+                    _ => Msg::Ignore,
+                };
+                html! {
+                    <div>
+                        <label for="hint">{ "Hinweis:" }</label>
+                        <input type="text" id="hint" name="hint" onchange=self.link.callback(send_hint)/>
+                    </div>
+                }
+            }
+            common::game::Action::FilterHint(id, hint, valid) => {
+                let send_filter_hint = {
+                    let id = *id;
+                    let hint = hint.clone();
+                    let valid = *valid;
+                    move |e: ChangeData| {
+                        let hint = hint.clone();
+                        match e {
+                            ChangeData::Value(_value) => {
+                                Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
+                            }
+                            _ => Msg::Ignore,
+                        }
+                    }
+                };
+                html! {
+                    <div>
+                        <input type="checkbox" id={hint} name={hint} checked = {*valid} onchange=self.link.callback(send_filter_hint)/>
+                        <label for={hint}>{hint}</label>
+                    </div>
+                }
+            }
+            common::game::Action::FinishHintFiltering(id) => {
+                let id = *id;
+                let send_finish_filtering =
+                    move |_| Msg::WsSend(common::game::Action::FinishHintFiltering(id));
+                html! {
+                    <div>
+                        <button onclick=self.link.callback(send_finish_filtering)>
+                        {"Wir sind uns einig."}
+                        </button>
+                    </div>
+                }
+            }
+            common::game::Action::Guess(id, _) => {
+                let id: usize = *id;
+                let send_guess = move |e: ChangeData| match e {
+                    ChangeData::Value(value) => Msg::WsSend(common::game::Action::Guess(id, value)),
+                    _ => Msg::Ignore,
+                };
+                html! {
+                    <div>
+                        <label for="hint">{ "Ich rate:" }</label>
+                        <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
+                    </div>
+                }
+            }
+            common::game::Action::Judge(id, correct) => {
+                let send_judgement = {
+                    let id = *id;
+                    let correct = *correct;
+                    move |e: ChangeData| match e {
+                        ChangeData::Value(_value) => {
+                            Msg::WsSend(common::game::Action::Judge(id, !correct))
+                        }
+                        _ => Msg::Ignore,
+                    }
+                };
+                html! {
+                    <div>
+                        <input type="checkbox" id="judge" name="judge" checked = {*correct} onchange=self.link.callback(send_judgement)/>
+                        <label for="judge">{"Richtig geraten"}</label>
+                    </div>
+                }
+            }
+            common::game::Action::FinishJudging(id) => {
+                let id = *id;
+                let send_finish_judging =
+                    move |_| Msg::WsSend(common::game::Action::FinishJudging(id));
+                html! {
+                    <div>
+                        <button onclick=self.link.callback(send_finish_judging)>
+                        {"Wir sind uns einig."}
+                        </button>
+                    </div>
+                }
+            }
         };
 
-        let state = format!("{:?}", self.state);
+        let state = format!("{:#?}", self.state);
         let action_html = self
             .state
             .actions
@@ -160,14 +248,14 @@ impl Component for Model {
         let state_html = match &self.state.me {
             Some(my_player) => {
                 html! {
-                    { format!("You are player {}.", my_player.name) }
+                    { format!("Teilnahme als {}.", my_player.name) }
                 }
             }
             None => {
                 let list_players = if self.state.players.len() > 0 {
                     html! {
                         <p>
-                            { "The following players take part in the game:" }
+                            { "Es sind anwesend:" }
                             <ul class="item-list">
                                 { for self.state.players.iter().map(|p|{ p.name.clone() }) }
                             </ul>
@@ -176,14 +264,14 @@ impl Component for Model {
                 } else {
                     html! {
                         <p>
-                            { "There are no players yet" }
+                            { "Es ist noch niemand hier." }
                         </p>
                     }
                 };
                 html! {
                     <>
                     <p>
-                        { "Would you like to join the game?" }
+                        { "Teilnehmen?" }
                     </p>
                         { list_players }
                     </>
@@ -195,7 +283,7 @@ impl Component for Model {
             html! {
                 <div>
                 <button onclick=self.link.callback(|_| WsAction::Connect)>
-                { "connect" }
+                { "Verbinden" }
                 </button>
                 </div>
             }

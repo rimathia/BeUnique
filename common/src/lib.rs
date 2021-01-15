@@ -22,6 +22,7 @@ pub mod game {
         GiveHint(usize, String),
         FilterHint(usize, String, bool),
         FinishHintFiltering(usize),
+        Guess(usize, String),
         Judge(usize, bool),
         FinishJudging(usize),
     }
@@ -158,6 +159,12 @@ pub mod game {
     }
 
     impl Dictionary {
+        pub fn new(words: Vec<String>) -> Self {
+            Self {
+                candidate_words: words,
+                used_words: vec![],
+            }
+        }
         fn get_word(&mut self) -> String {
             if self.candidate_words.is_empty() {
                 std::mem::swap(&mut self.candidate_words, &mut self.used_words);
@@ -168,7 +175,7 @@ pub mod game {
         }
     }
 
-    #[derive(Serialize, Deserialize, Debug, Clone, Default)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct State {
         pub players: Vec<Player>,
         pub active_index: Option<usize>,
@@ -186,14 +193,25 @@ pub mod game {
     }
 
     impl State {
+        pub fn new(dictionary: Dictionary) -> Self {
+            Self {
+                players: vec![],
+                active_index: None,
+                phase: GamePhase::default(),
+                past_rounds: vec![],
+                dictionary: dictionary,
+            }
+        }
+
         pub fn action(&mut self, action: &Action) -> Option<()> {
             match action {
                 Action::Join(new_id, new_name) => self.join(*new_id, new_name),
                 Action::DisconnectPlayer(id) => self.disconnect_player(*id),
-                Action::Start(id) => self.start(),
+                Action::Start(_id) => self.start(),
                 Action::GiveHint(id, hint) => self.process_hint(*id, hint),
                 Action::FilterHint(id, hint, valid) => self.process_hint_filter(*id, hint, *valid),
                 Action::FinishHintFiltering(id) => self.process_finish_hint_filter(*id),
+                Action::Guess(id, guess) => self.process_guess(*id, guess),
                 Action::Judge(id, correct) => self.process_guess_judgement(*id, *correct),
                 Action::FinishJudging(id) => self.process_finish_judging(*id),
             }
@@ -265,6 +283,12 @@ pub mod game {
                                 allowed: true,
                             },
                         );
+                        if hint_collection.hints.len() == self.players.len() - 1 {
+                            self.phase = GamePhase::HintFiltering(HintFiltering {
+                                word: hint_collection.word.clone(),
+                                hints: hint_collection.hints.clone(),
+                            });
+                        }
                         Some(())
                     } else {
                         eprintln!("hint from active player? {:?}", (id, hint));
@@ -278,27 +302,130 @@ pub mod game {
             }
         }
 
-        fn process_hint_filter(&mut self, id: usize, hint: &str, valid: bool) -> Option<()> {
-            None
+        fn process_hint_filter(&mut self, id: usize, hint: &str, allowed: bool) -> Option<()> {
+            let active = self.player_index(id)? == self.active_index?;
+            match &mut self.phase {
+                GamePhase::HintFiltering(HintFiltering { word: _, hints }) => {
+                    if !active {
+                        hints.get_mut(hint)?.allowed = allowed;
+                        Some(())
+                    } else {
+                        eprintln!("hint filtering from active player");
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!("hint filtering in wrong game state");
+                    None
+                }
+            }
         }
 
         fn process_finish_hint_filter(&mut self, id: usize) -> Option<()> {
-            None
+            let active = self.player_index(id)? == self.active_index?;
+            match &mut self.phase {
+                GamePhase::HintFiltering(HintFiltering { word, hints }) => {
+                    if !active {
+                        self.phase = GamePhase::Guessing(Guessing {
+                            word: word.clone(),
+                            hints: hints.clone(),
+                            guess: None,
+                        });
+                        Some(())
+                    } else {
+                        eprintln!("finish hint filtering from active player");
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!("finish hint filtering in wrong game state");
+                    None
+                }
+            }
+        }
+
+        fn process_guess(&mut self, id: usize, input_guess: &str) -> Option<()> {
+            let active = self.player_index(id)? == self.active_index?;
+            match &mut self.phase {
+                GamePhase::Guessing(Guessing { word, hints, guess }) => {
+                    if active {
+                        *guess = Some(input_guess.to_string());
+                        self.phase = GamePhase::Judging(Judging {
+                            word: word.clone(),
+                            hints: hints.clone(),
+                            guess: guess.clone(),
+                            success: None,
+                        });
+                        Some(())
+                    } else {
+                        eprintln!("guess from inactive player");
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!("guess in wrong game state");
+                    None
+                }
+            }
         }
 
         fn process_guess_judgement(&mut self, id: usize, correct: bool) -> Option<()> {
-            None
+            let active = self.player_index(id)? == self.active_index?;
+            match &mut self.phase {
+                GamePhase::Judging(Judging {
+                    word: _,
+                    hints: _,
+                    guess: _,
+                    success,
+                }) => {
+                    if !active {
+                        *success = Some(correct);
+                        Some(())
+                    } else {
+                        eprintln!("judgement from active player");
+                        None
+                    }
+                }
+                _ => {
+                    eprintln!("guess judgement in wrong game state");
+                    None
+                }
+            }
         }
 
-        fn process_finish_judging(&mut self, id: usize) -> Option<()> {
-            None
+        fn process_finish_judging(&mut self, _id: usize) -> Option<()> {
+            match &mut self.phase {
+                GamePhase::Judging(Judging {
+                    word,
+                    hints: _,
+                    guess: _,
+                    success,
+                }) => {
+                    let active_player = &self.players[self.active_index?];
+                    self.past_rounds.push((
+                        active_player.clone(),
+                        word.clone(),
+                        success.unwrap_or(false),
+                    ));
+                    self.active_index = Some((self.active_index? + 1) % self.players.len());
+                    self.phase = GamePhase::HintCollection(HintCollection {
+                        word: self.dictionary.get_word(),
+                        hints: HashMap::new(),
+                    });
+                    Some(())
+                }
+                _ => {
+                    eprintln!("finish judging in wrong game state");
+                    None
+                }
+            }
         }
 
         pub fn list_actions(&self, id: usize) -> Vec<Action> {
             match self.player_index(id) {
                 Some(i) => {
                     let active = i == self.active_index.unwrap_or(0);
-                    match self.phase {
+                    match &self.phase {
                         GamePhase::GatherPlayers => {
                             if self.players.len() >= 2 {
                                 vec![Action::Start(id)]
@@ -313,12 +440,16 @@ pub mod game {
                                 vec![]
                             }
                         }
-                        GamePhase::HintFiltering(_) => {
+                        GamePhase::HintFiltering(HintFiltering { word: _, hints }) => {
                             if !active {
-                                vec![
-                                    Action::FilterHint(id, String::new(), true),
-                                    Action::FinishHintFiltering(id),
-                                ]
+                                let mut actions: Vec<Action> = hints
+                                    .iter()
+                                    .map(|(_, hint)| {
+                                        Action::FilterHint(id, hint.content.clone(), hint.allowed)
+                                    })
+                                    .collect();
+                                actions.push(Action::FinishHintFiltering(id));
+                                actions
                             } else {
                                 vec![]
                             }
@@ -327,7 +458,7 @@ pub mod game {
                             if !active {
                                 vec![]
                             } else {
-                                vec![Action::GiveHint(id, String::new())]
+                                vec![Action::Guess(id, String::new())]
                             }
                         }
                         GamePhase::Judging(_) => {
@@ -369,9 +500,55 @@ pub mod game {
                                 ))
                             }
                         }
-                        GamePhase::HintFiltering(_) => VisibleGamePhase::GatherPlayers,
-                        GamePhase::Guessing(_) => VisibleGamePhase::GatherPlayers,
-                        GamePhase::Judging(_) => VisibleGamePhase::GatherPlayers,
+                        GamePhase::HintFiltering(HintFiltering { word, hints }) => {
+                            if active {
+                                VisibleGamePhase::HintFiltering(VisibleHintFiltering::Active(
+                                    ActiveHintFiltering {
+                                        players_valid_hints: hints
+                                            .iter()
+                                            .map(|(name, _)| name.to_string())
+                                            .collect(),
+                                    },
+                                ))
+                            } else {
+                                VisibleGamePhase::HintFiltering(VisibleHintFiltering::Inactive(
+                                    InactiveHintFiltering(HintFiltering {
+                                        word: word.clone(),
+                                        hints: hints.clone(),
+                                    }),
+                                ))
+                            }
+                        }
+                        GamePhase::Guessing(Guessing { word, hints, guess }) => {
+                            if active {
+                                VisibleGamePhase::Guessing(VisibleGuessing::Active(
+                                    ActiveGuessing {
+                                        hints: hints
+                                            .iter()
+                                            .map(|(key, value)| {
+                                                (key.clone(), VisibleHint(value.content.clone()))
+                                            })
+                                            .collect(),
+                                        guess: None,
+                                    },
+                                ))
+                            } else {
+                                VisibleGamePhase::Guessing(VisibleGuessing::Inactive(
+                                    InactiveGuessing(Guessing {
+                                        word: word.clone(),
+                                        hints: hints.clone(),
+                                        guess: guess.clone(),
+                                    }),
+                                ))
+                            }
+                        }
+                        GamePhase::Judging(judging) => {
+                            if active {
+                                VisibleGamePhase::Judging(VisibleJudging::Active(judging.clone()))
+                            } else {
+                                VisibleGamePhase::Judging(VisibleJudging::Inactive(judging.clone()))
+                            }
+                        }
                     }
                 }
                 None => VisibleGamePhase::GatherPlayers,
