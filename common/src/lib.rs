@@ -41,13 +41,13 @@ pub mod game {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ActiveHintCollection {
-        players_done: Vec<String>,
+        pub players_done: Vec<String>,
     }
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct InactiveHintCollection {
-        word: String,
-        hint: Option<Hint>,
-        players_done: Vec<String>,
+        pub word: String,
+        pub hint: Option<Hint>,
+        pub players_done: Vec<String>,
     }
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub enum VisibleHintCollection {
@@ -63,7 +63,7 @@ pub mod game {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ActiveHintFiltering {
-        players_valid_hints: Vec<String>,
+        pub players_valid_hints: Vec<String>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -83,12 +83,12 @@ pub mod game {
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
-    pub struct VisibleHint(String);
+    pub struct VisibleHint(pub String);
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ActiveGuessing {
-        hints: HashMap<String, VisibleHint>,
-        guess: Option<String>,
+        pub hints: HashMap<String, VisibleHint>,
+        pub guess: Option<String>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -307,7 +307,11 @@ pub mod game {
             match &mut self.phase {
                 GamePhase::HintFiltering(HintFiltering { word: _, hints }) => {
                     if !active {
-                        hints.get_mut(hint)?.allowed = allowed;
+                        for (_author, h) in hints.iter_mut() {
+                            if h.content == hint {
+                                h.allowed = allowed;
+                            }
+                        }
                         Some(())
                     } else {
                         eprintln!("hint filtering from active player");

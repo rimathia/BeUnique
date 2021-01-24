@@ -159,24 +159,28 @@ impl Component for Model {
                 }
             }
             common::game::Action::FilterHint(id, hint, valid) => {
-                let send_filter_hint = {
+                let send_flip_hint_validity = {
                     let id = *id;
                     let hint = hint.clone();
                     let valid = *valid;
-                    move |e: ChangeData| {
+                    move |_| {
                         let hint = hint.clone();
-                        match e {
-                            ChangeData::Value(_value) => {
-                                Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
-                            }
-                            _ => Msg::Ignore,
-                        }
+                        Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
+                    }
+                };
+                let flip_label = {
+                    if *valid {
+                        "ungültig".to_string()
+                    } else {
+                        "gültig".to_string()
                     }
                 };
                 html! {
                     <div>
-                        <input type="checkbox" id={hint} name={hint} checked = {*valid} onchange=self.link.callback(send_filter_hint)/>
-                        <label for={hint}>{hint}</label>
+                        {hint}
+                        <button onclick=self.link.callback(send_flip_hint_validity)>
+                        {flip_label}
+                        </button>
                     </div>
                 }
             }
@@ -245,29 +249,28 @@ impl Component for Model {
             .map(|action| to_html(action))
             .collect::<Vec<Html>>();
 
-        let state_html = match &self.state.me {
-            Some(my_player) => {
+        let state_html = {
+            let is_me = |player: &game::Player| match &self.state.me {
+                Some(me) => me.name == player.name,
+                None => false,
+            };
+            let list_players = if self.state.players.len() > 0 {
                 html! {
-                    { format!("Teilnahme als {}.", my_player.name) }
+                    <p>
+                        { "Es sind anwesend:" }
+                        <ul class="item-list">
+                            { for self.state.players.iter().map(|p|{ if !is_me(p) { p.name.clone() } else { p.name.clone() + " (ich)" }}) }
+                        </ul>
+                    </p>
                 }
-            }
-            None => {
-                let list_players = if self.state.players.len() > 0 {
-                    html! {
-                        <p>
-                            { "Es sind anwesend:" }
-                            <ul class="item-list">
-                                { for self.state.players.iter().map(|p|{ p.name.clone() }) }
-                            </ul>
-                        </p>
-                    }
-                } else {
-                    html! {
-                        <p>
-                            { "Es ist noch niemand hier." }
-                        </p>
-                    }
-                };
+            } else {
+                html! {
+                    <p>
+                        { "Es ist noch niemand hier." }
+                    </p>
+                }
+            };
+            if self.state.me.is_none() {
                 html! {
                     <>
                     <p>
@@ -276,7 +279,66 @@ impl Component for Model {
                         { list_players }
                     </>
                 }
+            } else {
+                html! {
+                    <>
+                        { list_players }
+                    </>
+                }
             }
+        };
+
+        let prelude = match &self.state.phase {
+            game::VisibleGamePhase::GatherPlayers => {
+                html! { { "Das Spiel hat noch nicht angefangen." } }
+            }
+            game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
+                hint_collection,
+            )) => {
+                html! {
+                    { format!(
+                        "Es sind schon {} Hinweise eingegangen.",
+                        hint_collection.players_done.len()
+                    ) }
+                }
+            }
+            game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Inactive(
+                hint_collection,
+            )) => html! { { format!(
+                "Bitte gib einen Hinweis für das Wort {}.",
+                hint_collection.word
+            ) } },
+            game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Active(
+                hint_filtering,
+            )) => html! { { format!(
+                "Es werden doppelte Hinweise entfernt, aktuell sind {} übrig.",
+                hint_filtering.players_valid_hints.len()
+            ) } },
+            game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(_)) => {
+                html! { { format!("Welche Hinweise sind gültig?") } }
+            }
+            game::VisibleGamePhase::Guessing(game::VisibleGuessing::Active(guessing)) => {
+                let render_hint = |hint: &game::VisibleHint| {
+                    html! {
+                        <div>
+                             { hint.0.clone() }
+                        </div>
+                    }
+                };
+                html! {
+                    <>
+                    { "Die Hinweise sind:" }
+                    <ul class="item-list">
+                        { for guessing.hints.iter().map(|(_, h)|{ render_hint(h) } ) }
+                    </ul>
+                    { "Welches Wort ist gesucht?" }
+                    </>
+                }
+            }
+            game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(_)) => {
+                html! { { "Jetzt wird geraten." } }
+            }
+            _ => html! { { "Noch nicht implementiert." } },
         };
 
         if self.ws.is_none() {
@@ -294,10 +356,13 @@ impl Component for Model {
                         { state }
                     </p>
                     <p>
-                        { state_html }
+                        { prelude }
                     </p>
                     <p>
                         { action_html }
+                    </p>
+                    <p>
+                        { state_html }
                     </p>
                 </div>
             }
