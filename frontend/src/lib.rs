@@ -327,12 +327,24 @@ impl Component for Model {
                     </div>
                 }
             }
+            common::game::Action::Leave(id) => {
+                let id = *id;
+                let send_leave = move |_| Msg::WsSend(common::game::Action::Leave(id));
+                html! {
+                    <div>
+                        <button onclick=self.link.callback(send_leave)>
+                        { "Spiel verlassen" }
+                        </button>
+                    </div>
+                }
+            }
         };
 
         let action_html = self
             .state
             .actions
             .iter()
+            .filter(|a| !matches!(a, game::Action::Leave(_)))
             .map(|action| to_html(action))
             .collect::<Vec<Html>>();
 
@@ -433,11 +445,13 @@ impl Component for Model {
             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
                 hint_collection,
             )) => {
-                let message = if hint_collection.players_done.len() > 0 {
+                let message = if hint_collection.players_done.len() > 1 {
                     format!(
                         "Es sind schon {} Hinweise eingegangen.",
                         hint_collection.players_done.len()
                     )
+                } else if hint_collection.players_done.len() == 1 {
+                    format!("Es ist schon 1 Hinweis eingegangen.")
                 } else {
                     format!("Es sind noch keine Hinweise eingegangen.")
                 };
@@ -465,16 +479,16 @@ impl Component for Model {
             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Active(guessing)) => {
                 let render_hint = |hint: &game::VisibleHint| {
                     html! {
-                        <div>
-                             { hint.0.clone() }
-                        </div>
+                        <li>
+                             { hint.clone() }
+                        </li>
                     }
                 };
                 html! {
                     <>
                     { "Die Hinweise sind:" }
                     <ul class="item-list">
-                        { for guessing.hints.iter().map(|(_, h)|{ render_hint(h) } ) }
+                        { for self.state.players.iter().filter_map(|p| guessing.hints.get(&p.name)).map(|h| render_hint(h)  ) }
                     </ul>
                     { "Welches Wort ist gesucht?" }
                     </>
@@ -561,6 +575,14 @@ impl Component for Model {
                 </div>
             }
         } else {
+            let leave = self
+                .state
+                .actions
+                .iter()
+                .filter(|a| matches!(a, game::Action::Leave(_)))
+                .map(|a| to_html(a))
+                .next()
+                .unwrap_or(html! {});
             // let state = format!("{:#?}", self.state);
             html! {
                 <div>
@@ -578,6 +600,9 @@ impl Component for Model {
                     </p>
                     <p>
                         { past_rounds_html }
+                    </p>
+                    <p>
+                        { leave }
                     </p>
                 </div>
             }

@@ -25,6 +25,7 @@ pub mod game {
         Guess(usize, Option<String>),
         Judge(usize, bool),
         FinishJudging(usize),
+        Leave(usize),
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -96,7 +97,26 @@ pub mod game {
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
-    pub struct VisibleHint(pub String);
+    pub struct VisibleHint(String);
+
+    impl std::fmt::Display for VisibleHint {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl core::ops::Deref for VisibleHint {
+        type Target = String;
+
+        fn deref(self: &Self) -> &Self::Target {
+            &self.0
+        }
+    }
+    impl core::ops::DerefMut for VisibleHint {
+        fn deref_mut(self: &mut Self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ActiveGuessing {
@@ -158,32 +178,30 @@ pub mod game {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct Dictionary {
-        candidate_words: Vec<String>,
-        used_words: Vec<String>,
+        words: Vec<String>,
+        next_index: usize,
     }
 
     impl Default for Dictionary {
         fn default() -> Self {
-            Dictionary {
-                candidate_words: vec!["Steinbruch".to_string(), "Schwan".to_string()],
-                used_words: vec![],
-            }
+            Dictionary::new(vec!["Steinbruch".to_string(), "Schwan".to_string()])
         }
     }
 
     impl Dictionary {
         pub fn new(words: Vec<String>) -> Self {
+            assert!(words.len() > 0, "cannot have an empty dictionary");
             Self {
-                candidate_words: words,
-                used_words: vec![],
+                words: words,
+                next_index: 0,
             }
         }
         fn get_word(&mut self) -> String {
-            if self.candidate_words.is_empty() {
-                std::mem::swap(&mut self.candidate_words, &mut self.used_words);
+            let word = self.words[self.next_index].clone();
+            self.next_index = self.next_index + 1;
+            if self.next_index >= self.words.len() {
+                self.next_index = 0;
             }
-            let word = self.candidate_words.pop().unwrap();
-            self.used_words.push(word.clone());
             word
         }
     }
@@ -235,6 +253,7 @@ pub mod game {
                 Action::Guess(id, guess) => self.process_guess(*id, guess),
                 Action::Judge(id, correct) => self.process_guess_judgement(*id, *correct),
                 Action::FinishJudging(id) => self.process_finish_judging(*id),
+                Action::Leave(id) => self.process_leave(*id),
             }
         }
 
@@ -446,11 +465,47 @@ pub mod game {
             }
         }
 
+        fn process_leave(&mut self, id: usize) -> Option<()> {
+            let leaving_index = self.player_index(id)?;
+            // circumvent index logic by determining the next player, then determining its index
+            let next_active_player: Option<Player> = (|| {
+                if self.active_index? == leaving_index {
+                    let next_index = (self.active_index? + 1) % self.players.len();
+                    Some(self.players[next_index].clone())
+                } else {
+                    Some(self.players[self.active_index?].clone())
+                }
+            })();
+            eprintln!("active player after leaving: {:?}", next_active_player);
+            self.players.remove(leaving_index);
+            self.active_index = (|| {
+                let next = next_active_player?;
+                self.players.iter().position(|p| p == &next)
+            })();
+            match self.phase {
+                GamePhase::GatherPlayers => {}
+                GamePhase::HintCollection(_)
+                | GamePhase::HintFiltering(_)
+                | GamePhase::Guessing(_)
+                | GamePhase::Judging(_) => {
+                    if self.players.len() >= 2 {
+                        self.phase = GamePhase::HintCollection(HintCollection {
+                            word: self.dictionary.get_word(),
+                            hints: HashMap::new(),
+                        });
+                    } else {
+                        self.phase = GamePhase::GatherPlayers
+                    }
+                }
+            }
+            Some(())
+        }
+
         pub fn list_actions(&self, id: usize) -> Vec<Action> {
             match self.player_index(id) {
                 Some(i) => {
                     let active = i == self.active_index.unwrap_or(0);
-                    match &self.phase {
+                    let mut actions = match &self.phase {
                         GamePhase::GatherPlayers => {
                             if self.players.len() >= 2 {
                                 vec![Action::Start(id)]
@@ -501,7 +556,9 @@ pub mod game {
                             }
                             actions
                         }
-                    }
+                    };
+                    actions.push(Action::Leave(id));
+                    actions
                 }
                 None => {
                     vec![Action::Join(id, String::new())]
