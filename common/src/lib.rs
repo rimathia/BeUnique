@@ -4,7 +4,7 @@ pub mod game {
 
     #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Clone)]
     pub struct Player {
-        id: Option<usize>,
+        pub id: Option<usize>,
         pub name: String,
     }
 
@@ -22,21 +22,21 @@ pub mod game {
         GiveHint(usize, String),
         FilterHint(usize, String, bool),
         FinishHintFiltering(usize),
-        Guess(usize, String),
+        Guess(usize, Option<String>),
         Judge(usize, bool),
         FinishJudging(usize),
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
     pub struct Hint {
-        content: String,
-        allowed: bool,
+        pub content: String,
+        pub allowed: bool,
     }
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
     pub struct HintCollection {
-        word: String,
-        hints: HashMap<String, Hint>,
+        pub word: String,
+        pub hints: HashMap<String, Hint>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,8 +57,8 @@ pub mod game {
 
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
     pub struct HintFiltering {
-        word: String,
-        hints: HashMap<String, Hint>,
+        pub word: String,
+        pub hints: HashMap<String, Hint>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -68,6 +68,19 @@ pub mod game {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct InactiveHintFiltering(HintFiltering);
+
+    impl core::ops::Deref for InactiveHintFiltering {
+        type Target = HintFiltering;
+
+        fn deref(self: &Self) -> &Self::Target {
+            &self.0
+        }
+    }
+    impl core::ops::DerefMut for InactiveHintFiltering {
+        fn deref_mut(self: &mut Self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub enum VisibleHintFiltering {
@@ -101,10 +114,10 @@ pub mod game {
     }
     #[derive(Serialize, Deserialize, Debug, Default, Clone)]
     pub struct Judging {
-        word: String,
-        hints: HashMap<String, Hint>,
-        guess: Option<String>,
-        success: Option<bool>,
+        pub word: String,
+        pub hints: HashMap<String, Hint>,
+        pub guess: Option<String>,
+        pub success: Option<bool>,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -176,11 +189,18 @@ pub mod game {
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct PastRound {
+        pub name: String,
+        pub word: String,
+        pub success: bool,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct State {
         pub players: Vec<Player>,
         pub active_index: Option<usize>,
         pub phase: GamePhase,
-        pub past_rounds: Vec<(Player, String, bool)>,
+        pub past_rounds: Vec<PastRound>,
         pub dictionary: Dictionary,
     }
 
@@ -190,6 +210,7 @@ pub mod game {
         pub me: Option<Player>,
         pub phase: VisibleGamePhase,
         pub actions: Vec<Action>,
+        pub past_rounds: Vec<PastRound>,
     }
 
     impl State {
@@ -348,12 +369,12 @@ pub mod game {
             }
         }
 
-        fn process_guess(&mut self, id: usize, input_guess: &str) -> Option<()> {
+        fn process_guess(&mut self, id: usize, input_guess: &Option<String>) -> Option<()> {
             let active = self.player_index(id)? == self.active_index?;
             match &mut self.phase {
                 GamePhase::Guessing(Guessing { word, hints, guess }) => {
                     if active {
-                        *guess = Some(input_guess.to_string());
+                        *guess = input_guess.clone();
                         self.phase = GamePhase::Judging(Judging {
                             word: word.clone(),
                             hints: hints.clone(),
@@ -406,11 +427,11 @@ pub mod game {
                     success,
                 }) => {
                     let active_player = &self.players[self.active_index?];
-                    self.past_rounds.push((
-                        active_player.clone(),
-                        word.clone(),
-                        success.unwrap_or(false),
-                    ));
+                    self.past_rounds.push(PastRound {
+                        name: active_player.name.clone(),
+                        word: word.clone(),
+                        success: success.unwrap_or(false),
+                    });
                     self.active_index = Some((self.active_index? + 1) % self.players.len());
                     self.phase = GamePhase::HintCollection(HintCollection {
                         word: self.dictionary.get_word(),
@@ -462,15 +483,23 @@ pub mod game {
                             if !active {
                                 vec![]
                             } else {
-                                vec![Action::Guess(id, String::new())]
+                                vec![Action::Guess(id, None)]
                             }
                         }
-                        GamePhase::Judging(_) => {
+                        GamePhase::Judging(Judging {
+                            word: _,
+                            hints: _,
+                            guess,
+                            success,
+                        }) => {
+                            let mut actions: Vec<Action> = vec![];
                             if !active {
-                                vec![Action::Judge(id, true), Action::FinishJudging(id)]
-                            } else {
-                                vec![]
+                                if guess.is_some() {
+                                    actions.push(Action::Judge(id, !success.unwrap_or(false)));
+                                }
+                                actions.push(Action::FinishJudging(id));
                             }
+                            actions
                         }
                     }
                 }
@@ -510,6 +539,7 @@ pub mod game {
                                     ActiveHintFiltering {
                                         players_valid_hints: hints
                                             .iter()
+                                            .filter(|(_name, hint)| hint.allowed)
                                             .map(|(name, _)| name.to_string())
                                             .collect(),
                                     },
@@ -529,6 +559,7 @@ pub mod game {
                                     ActiveGuessing {
                                         hints: hints
                                             .iter()
+                                            .filter(|(_key, value)| value.allowed)
                                             .map(|(key, value)| {
                                                 (key.clone(), VisibleHint(value.content.clone()))
                                             })
@@ -563,6 +594,7 @@ pub mod game {
                 me: self.player(id).cloned(),
                 phase: visible_phase,
                 actions: actions,
+                past_rounds: self.past_rounds.clone(),
             }
         }
     }

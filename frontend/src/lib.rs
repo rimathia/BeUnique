@@ -40,6 +40,81 @@ impl From<WsAction> for Msg {
     }
 }
 
+// struct GamePhase(game::VisibleGamePhase);
+
+// impl Component for GamePhase {
+//     fn view(&self) -> Html {
+//         match &self.0 {
+//             game::VisibleGamePhase::GatherPlayers => {
+//                 html! { { "Das Spiel hat noch nicht angefangen." } }
+//             }
+//             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
+//                 hint_collection,
+//             )) => {
+//                 html! {
+//                     { format!(
+//                         "Es sind schon {} Hinweise eingegangen.",
+//                         hint_collection.players_done.len()
+//                     ) }
+//                 }
+//             }
+//             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Inactive(
+//                 hint_collection,
+//             )) => html! { { format!(
+//                 "Bitte gib einen Hinweis für das Wort {}.",
+//                 hint_collection.word
+//             ) } },
+//             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Active(
+//                 hint_filtering,
+//             )) => html! { { format!(
+//                 "Es werden doppelte Hinweise entfernt, aktuell sind {} übrig.",
+//                 hint_filtering.players_valid_hints.len()
+//             ) } },
+//             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(_)) => {
+//                 html! { { format!("Welche Hinweise sind gültig?") } }
+//             }
+//             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Active(guessing)) => {
+//                 let render_hint = |hint: &game::VisibleHint| {
+//                     html! {
+//                         <div>
+//                              { hint.0.clone() }
+//                         </div>
+//                     }
+//                 };
+//                 html! {
+//                     <>
+//                     { "Die Hinweise sind:" }
+//                     <ul class="item-list">
+//                         { for guessing.hints.iter().map(|(_, h)|{ render_hint(h) } ) }
+//                     </ul>
+//                     { "Welches Wort ist gesucht?" }
+//                     </>
+//                 }
+//             }
+//             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(_)) => {
+//                 html! { { "Jetzt wird geraten." } }
+//             }
+//             _ => html! { { "Noch nicht implementiert." } },
+//         }
+//     }
+//
+//     type Message = ();
+//
+//     type Properties = ();
+//
+//     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
+//         todo!()
+//     }
+//
+//     fn update(&mut self, msg: Self::Message) -> ShouldRender {
+//         todo!()
+//     }
+//
+//     fn change(&mut self, _props: Self::Properties) -> ShouldRender {
+//         todo!()
+//     }
+// }
+
 impl Component for Model {
     type Message = Msg;
     type Properties = ();
@@ -191,7 +266,7 @@ impl Component for Model {
                 html! {
                     <div>
                         <button onclick=self.link.callback(send_finish_filtering)>
-                        {"Wir sind uns einig."}
+                        {"Hinweisbeurteilung abschliessen."}
                         </button>
                     </div>
                 }
@@ -199,31 +274,44 @@ impl Component for Model {
             common::game::Action::Guess(id, _) => {
                 let id: usize = *id;
                 let send_guess = move |e: ChangeData| match e {
-                    ChangeData::Value(value) => Msg::WsSend(common::game::Action::Guess(id, value)),
+                    ChangeData::Value(value) => {
+                        Msg::WsSend(common::game::Action::Guess(id, Some(value)))
+                    }
                     _ => Msg::Ignore,
                 };
+                let send_no_guess = move |_| Msg::WsSend(common::game::Action::Guess(id, None));
                 html! {
+                    <>
                     <div>
                         <label for="hint">{ "Ich rate:" }</label>
                         <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
                     </div>
+                    <div>
+                        <button onclick=self.link.callback(send_no_guess)>
+                        {"Keine Ahnung"}
+                        </button>
+                    </div>
+                    </>
                 }
             }
             common::game::Action::Judge(id, correct) => {
-                let send_judgement = {
+                let send_flip_guess_validity = {
                     let id = *id;
                     let correct = *correct;
-                    move |e: ChangeData| match e {
-                        ChangeData::Value(_value) => {
-                            Msg::WsSend(common::game::Action::Judge(id, !correct))
-                        }
-                        _ => Msg::Ignore,
+                    move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
+                };
+                let flip_label = {
+                    if *correct {
+                        "Antwort für richtig erklären".to_string()
+                    } else {
+                        "Antwort für falsch erklären".to_string()
                     }
                 };
                 html! {
                     <div>
-                        <input type="checkbox" id="judge" name="judge" checked = {*correct} onchange=self.link.callback(send_judgement)/>
-                        <label for="judge">{"Richtig geraten"}</label>
+                        <button onclick=self.link.callback(send_flip_guess_validity)>
+                        {flip_label}
+                        </button>
                     </div>
                 }
             }
@@ -234,14 +322,13 @@ impl Component for Model {
                 html! {
                     <div>
                         <button onclick=self.link.callback(send_finish_judging)>
-                        {"Wir sind uns einig."}
+                        {"Runde abschliessen"}
                         </button>
                     </div>
                 }
             }
         };
 
-        let state = format!("{:#?}", self.state);
         let action_html = self
             .state
             .actions
@@ -254,12 +341,26 @@ impl Component for Model {
                 Some(me) => me.name == player.name,
                 None => false,
             };
+            let list_item = |p: &game::Player| {
+                let mut content = p.name.clone();
+                if is_me(p) {
+                    content += " (ich)";
+                }
+                if p.id.is_none() {
+                    content += " (Verbindung verloren)"
+                }
+                html! {
+                    <li>
+                    { content }
+                    </li>
+                }
+            };
             let list_players = if self.state.players.len() > 0 {
                 html! {
                     <p>
-                        { "Es sind anwesend:" }
+                        { "Es spielen mit:" }
                         <ul class="item-list">
-                            { for self.state.players.iter().map(|p|{ if !is_me(p) { p.name.clone() } else { p.name.clone() + " (ich)" }}) }
+                            { for self.state.players.iter().map(list_item) }
                         </ul>
                     </p>
                 }
@@ -288,6 +389,43 @@ impl Component for Model {
             }
         };
 
+        let past_rounds_html = if self.state.past_rounds.len() == 0 {
+            html! {}
+        } else {
+            let n_success = self.state.past_rounds.iter().filter(|p| p.success).count();
+            let n_total = self.state.past_rounds.len();
+            let summary = format!(
+                "Es wurde in {} von {} Runden richtig geraten.",
+                n_success, n_total
+            );
+            let list_item = |p: &game::PastRound| {
+                let verdict = if p.success {
+                    format!("{} hat \"{}\" erraten.", p.name, p.word)
+                } else {
+                    format!("{} hat \"{}\" nicht erraten.", p.name, p.word)
+                };
+                html! {
+                    <li> { verdict } </li>
+                }
+            };
+            let list_rounds = html! {
+                <p>
+                    <ul class="item-list">
+                        { for self.state.past_rounds.iter().map(list_item) }
+                    </ul>
+                </p>
+            };
+            html! {
+                <>
+                    <p>
+                    { "Was bisher geschah: "}
+                    </p>
+                    { summary }
+                    { list_rounds }
+                </>
+            }
+        };
+
         let prelude = match &self.state.phase {
             game::VisibleGamePhase::GatherPlayers => {
                 html! { { "Das Spiel hat noch nicht angefangen." } }
@@ -295,17 +433,22 @@ impl Component for Model {
             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
                 hint_collection,
             )) => {
-                html! {
-                    { format!(
+                let message = if hint_collection.players_done.len() > 0 {
+                    format!(
                         "Es sind schon {} Hinweise eingegangen.",
                         hint_collection.players_done.len()
-                    ) }
+                    )
+                } else {
+                    format!("Es sind noch keine Hinweise eingegangen.")
+                };
+                html! {
+                    { message }
                 }
             }
             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Inactive(
                 hint_collection,
             )) => html! { { format!(
-                "Bitte gib einen Hinweis für das Wort {}.",
+                "Bitte gib einen Hinweis für \"{}\".",
                 hint_collection.word
             ) } },
             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Active(
@@ -314,8 +457,10 @@ impl Component for Model {
                 "Es werden doppelte Hinweise entfernt, aktuell sind {} übrig.",
                 hint_filtering.players_valid_hints.len()
             ) } },
-            game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(_)) => {
-                html! { { format!("Welche Hinweise sind gültig?") } }
+            game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(
+                hint_filtering,
+            )) => {
+                html! { { format!("Welche Hinweise für \"{}\" sind gültig?", hint_filtering.word) } }
             }
             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Active(guessing)) => {
                 let render_hint = |hint: &game::VisibleHint| {
@@ -336,9 +481,75 @@ impl Component for Model {
                 }
             }
             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(_)) => {
-                html! { { "Jetzt wird geraten." } }
+                html! { { "Wir warten bis geraten wurde." } }
             }
-            _ => html! { { "Noch nicht implementiert." } },
+            game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
+            | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
+                let word = html! {
+                    <p>
+                        {format!("Das gesuchte Wort war {}.", judging.word)}
+                    </p>
+                };
+                let guess = match &judging.guess {
+                    Some(guess) => {
+                        let literal_guess = if judging.success.unwrap_or(false) {
+                            html! { {guess} }
+                        } else {
+                            html! { <s> {guess} </s> }
+                        };
+                        html! {
+                            <>
+                            <p>
+                                {{"Geraten:"}}
+                            </p>
+                            <p>
+                                { literal_guess }
+                            </p>
+                            </>
+                        }
+                    }
+                    None => {
+                        html! { { "Keine Antwort gegeben." }}
+                    }
+                };
+                let hint_line = |(author, hint): (&String, &game::Hint)| {
+                    let content = if hint.allowed {
+                        html! {
+                            { hint.content.clone() }
+                        }
+                    } else {
+                        html! {
+                            <s> {hint.content.clone()} </s>
+                        }
+                    };
+                    html! {
+                            <tr>
+                                <td>{author}</td>
+                                <td> { content } </td>
+                             </tr>
+
+                    }
+                };
+                let all_hints = html! {
+                    <table>
+                        <thead>
+                            <tr>
+                                <th colspan="2">{"Hinweise"}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for judging.hints.iter().map(hint_line) }
+                        </tbody>
+                    </table>
+                };
+                html! {
+                    <>
+                    { word }
+                    { guess }
+                    { all_hints }
+                    </>
+                }
+            }
         };
 
         if self.ws.is_none() {
@@ -350,11 +561,12 @@ impl Component for Model {
                 </div>
             }
         } else {
+            // let state = format!("{:#?}", self.state);
             html! {
                 <div>
-                    <p>
-                        { state }
-                    </p>
+                    // <p>
+                    //     { format!("{:#?}", state) }
+                    // </p>
                     <p>
                         { prelude }
                     </p>
@@ -363,6 +575,9 @@ impl Component for Model {
                     </p>
                     <p>
                         { state_html }
+                    </p>
+                    <p>
+                        { past_rounds_html }
                     </p>
                 </div>
             }
