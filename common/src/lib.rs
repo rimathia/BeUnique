@@ -222,6 +222,16 @@ pub mod game {
         pub dictionary: Dictionary,
     }
 
+    impl State {
+        fn restart(&mut self) {
+            self.players = vec![];
+            self.active_index = None;
+            self.phase = GamePhase::GatherPlayers;
+            self.past_rounds = vec![];
+            // leave the dictionary as it is
+        }
+    }
+
     #[derive(Serialize, Deserialize, Debug, Default)]
     pub struct PlayerView {
         pub players: Vec<Player>,
@@ -476,12 +486,16 @@ pub mod game {
                     Some(self.players[self.active_index?].clone())
                 }
             })();
-            eprintln!("active player after leaving: {:?}", next_active_player);
+            eprintln!(
+                "target active player after leaving: {:?}",
+                next_active_player
+            );
             self.players.remove(leaving_index);
             self.active_index = (|| {
                 let next = next_active_player?;
                 self.players.iter().position(|p| p == &next)
             })();
+            eprintln!("active index after leaving: {:?}", self.active_index);
             match self.phase {
                 GamePhase::GatherPlayers => {}
                 GamePhase::HintCollection(_)
@@ -497,6 +511,10 @@ pub mod game {
                         self.phase = GamePhase::GatherPlayers
                     }
                 }
+            }
+            if self.players.len() == 0 {
+                eprintln!("no players left, restart");
+                self.restart();
             }
             Some(())
         }

@@ -45,7 +45,7 @@ async fn main() {
         dictionary,
     )));
 
-    let routes = warp::path("test")
+    let routes = warp::path("websocket")
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .and(filters::with_users(users))

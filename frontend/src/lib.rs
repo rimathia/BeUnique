@@ -140,7 +140,7 @@ impl Component for Model {
                             }
                         });
                         let task = WebSocketService::connect(
-                            "ws://localhost:9001/test",
+                            "ws://localhost:9001/websocket",
                             callback,
                             notification,
                         )
