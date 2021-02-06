@@ -1,3 +1,4 @@
+use futures::join;
 use rand::thread_rng;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -67,7 +68,12 @@ async fn main() {
             .and(filters::with_state(state.clone()))
             .map(|state: models::State| format!("{:#?}", state)));
 
-    warp::serve(routes).run(([127, 0, 0, 1], 9001)).await;
+    let fut_ws = warp::serve(routes).bind(([127, 0, 0, 1], 9001));
+
+    let static_route = warp::fs::dir("static");
+    let fut_static = warp::serve(static_route).bind(([127, 0, 0, 1], 8080));
+
+    join!(fut_ws, fut_static);
 }
 
 mod handlers {
