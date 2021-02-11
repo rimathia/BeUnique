@@ -9,6 +9,99 @@ use yew::services::websocket::{WebSocketService, WebSocketStatus, WebSocketTask}
 extern crate common;
 use common::game;
 
+// doesn't work at all up to now
+// #[derive(Properties, Clone, PartialEq)]
+// struct PastRoundProperties {
+//     g: game::PastRound,
+// }
+//
+// struct PastRound {
+//     props: PastRoundProperties,
+// }
+//
+// impl Component for PastRound {
+//     type Message = ();
+//     type Properties = PastRoundProperties;
+//
+//     fn create(props: Self::Properties, _link: ComponentLink<Self>) -> Self {
+//         PastRound { props }
+//     }
+//
+//     fn view(&self) -> Html {
+//         let text = if self.props.g.success {
+//             format!(
+//                 "{} hat \"{}\" erraten",
+//                 self.props.g.name, self.props.g.word
+//             )
+//         } else {
+//             format!(
+//                 "{} hat \"{}\" nicht erraten",
+//                 self.props.g.name, self.props.g.word
+//             )
+//         };
+//         html! {
+//             <div>
+//                 { text }
+//             </div>
+//         }
+//     }
+//
+//     fn update(&mut self, _msg: Self::Message) -> ShouldRender {
+//         false
+//     }
+//
+//     fn change(&mut self, props: Self::Properties) -> ShouldRender {
+//         if self.props != props {
+//             self.props = props;
+//             true
+//         } else {
+//             false
+//         }
+//     }
+// }
+//
+// #[derive(Properties, Clone, PartialEq)]
+// struct PastRoundsProperties {
+//     #[prop_or_default]
+//     pub children: ChildrenWithProps<PastRound>,
+// }
+//
+// struct PastRounds {
+//     props: PastRoundsProperties,
+// }
+//
+// impl Component for PastRounds {
+//     type Message = ();
+//
+//     type Properties = PastRoundsProperties;
+//
+//     fn create(props: Self::Properties, _link: ComponentLink<Self>) -> Self {
+//         Self { props }
+//     }
+//
+//     fn update(&mut self, _msg: Self::Message) -> ShouldRender {
+//         false
+//     }
+//
+//     fn change(&mut self, props: Self::Properties) -> ShouldRender {
+//         if self.props != props {
+//             self.props = props;
+//             true
+//         } else {
+//             false
+//         }
+//     }
+//
+//     fn view(&self) -> Html {
+//         html! {
+//         <div>
+//         {
+//             for self.props.children.iter()
+//         }
+//         </div>}
+//     }
+// }
+
 struct Model {
     link: ComponentLink<Self>,
     state: game::PlayerView,
@@ -21,13 +114,7 @@ pub enum WsAction {
     Lost,
 }
 
-//#[derive(Serialize, Deserialize, Debug)]
-//pub struct WsResponse {
-//    value: i64,
-//}
-
 enum Msg {
-    // Add(i64),
     Ignore,
     WsAction(WsAction),
     WsReady(Result<game::PlayerView, Error>),
@@ -39,81 +126,6 @@ impl From<WsAction> for Msg {
         Msg::WsAction(action)
     }
 }
-
-// struct GamePhase(game::VisibleGamePhase);
-
-// impl Component for GamePhase {
-//     fn view(&self) -> Html {
-//         match &self.0 {
-//             game::VisibleGamePhase::GatherPlayers => {
-//                 html! { { "Das Spiel hat noch nicht angefangen." } }
-//             }
-//             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
-//                 hint_collection,
-//             )) => {
-//                 html! {
-//                     { format!(
-//                         "Es sind schon {} Hinweise eingegangen.",
-//                         hint_collection.players_done.len()
-//                     ) }
-//                 }
-//             }
-//             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Inactive(
-//                 hint_collection,
-//             )) => html! { { format!(
-//                 "Bitte gib einen Hinweis für das Wort {}.",
-//                 hint_collection.word
-//             ) } },
-//             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Active(
-//                 hint_filtering,
-//             )) => html! { { format!(
-//                 "Es werden doppelte Hinweise entfernt, aktuell sind {} übrig.",
-//                 hint_filtering.players_valid_hints.len()
-//             ) } },
-//             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(_)) => {
-//                 html! { { format!("Welche Hinweise sind gültig?") } }
-//             }
-//             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Active(guessing)) => {
-//                 let render_hint = |hint: &game::VisibleHint| {
-//                     html! {
-//                         <div>
-//                              { hint.0.clone() }
-//                         </div>
-//                     }
-//                 };
-//                 html! {
-//                     <>
-//                     { "Die Hinweise sind:" }
-//                     <ul class="item-list">
-//                         { for guessing.hints.iter().map(|(_, h)|{ render_hint(h) } ) }
-//                     </ul>
-//                     { "Welches Wort ist gesucht?" }
-//                     </>
-//                 }
-//             }
-//             game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(_)) => {
-//                 html! { { "Jetzt wird geraten." } }
-//             }
-//             _ => html! { { "Noch nicht implementiert." } },
-//         }
-//     }
-//
-//     type Message = ();
-//
-//     type Properties = ();
-//
-//     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {
-//         todo!()
-//     }
-//
-//     fn update(&mut self, msg: Self::Message) -> ShouldRender {
-//         todo!()
-//     }
-//
-//     fn change(&mut self, _props: Self::Properties) -> ShouldRender {
-//         todo!()
-//     }
-// }
 
 impl Component for Model {
     type Message = Msg;
@@ -195,7 +207,7 @@ impl Component for Model {
                 };
                 html! {
                         <div>
-                            <label for="uname">{ "Mein Name:" }</label>
+                            <label for="uname">{ "Mein Name: " }</label>
                             <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
                         </div>
                 }
@@ -212,7 +224,7 @@ impl Component for Model {
                 let send_start = move |_| Msg::WsSend(common::game::Action::Start(cloned_id));
                 html! {
                     <div>
-                        <button onclick=self.link.callback(send_start)>
+                        <button onclick=self.link.callback(send_start) class="button actionbutton startbutton">
                         {"Start"}
                         </button>
                     </div>
@@ -228,7 +240,7 @@ impl Component for Model {
                 };
                 html! {
                     <div>
-                        <label for="hint">{ "Hinweis:" }</label>
+                        <label for="hint">{ "Hinweis: " }</label>
                         <input type="text" id="hint" name="hint" onchange=self.link.callback(send_hint)/>
                     </div>
                 }
@@ -250,12 +262,21 @@ impl Component for Model {
                         "gültig".to_string()
                     }
                 };
+                let hintlabelclass = if *valid {
+                    "hintlabel hintlabel_valid"
+                } else {
+                    "hintlabel hintlabel_invalid"
+                };
                 html! {
-                    <div>
+                    <div class="hintline">
+                        <div class={hintlabelclass}>
                         {hint}
-                        <button onclick=self.link.callback(send_flip_hint_validity)>
+                        </div>
+                        <div>
+                        <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
                         {flip_label}
                         </button>
+                        </div>
                     </div>
                 }
             }
@@ -265,8 +286,8 @@ impl Component for Model {
                     move |_| Msg::WsSend(common::game::Action::FinishHintFiltering(id));
                 html! {
                     <div>
-                        <button onclick=self.link.callback(send_finish_filtering)>
-                        {"Hinweisbeurteilung abschliessen."}
+                        <button onclick=self.link.callback(send_finish_filtering) class="button actionbutton proceedbutton">
+                        {"Hinweisbeurteilung abschliessen"}
                         </button>
                     </div>
                 }
@@ -283,11 +304,11 @@ impl Component for Model {
                 html! {
                     <>
                     <div>
-                        <label for="hint">{ "Ich rate:" }</label>
+                        <label for="hint">{ "Ich rate: " }</label>
                         <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
                     </div>
                     <div>
-                        <button onclick=self.link.callback(send_no_guess)>
+                        <button onclick=self.link.callback(send_no_guess) class="button actionbutton guessbutton">
                         {"Keine Ahnung"}
                         </button>
                     </div>
@@ -302,18 +323,51 @@ impl Component for Model {
                 };
                 let flip_label = {
                     if *correct {
-                        "Antwort für richtig erklären".to_string()
+                        "ist richtig".to_string()
                     } else {
-                        "Antwort für falsch erklären".to_string()
+                        "ist falsch".to_string()
                     }
                 };
-                html! {
-                    <div>
-                        <button onclick=self.link.callback(send_flip_guess_validity)>
-                        {flip_label}
-                        </button>
-                    </div>
-                }
+                let guess = match &self.state.phase {
+                    game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
+                    | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
+                        match &judging.guess {
+                            Some(guess) => Some(guess.clone()),
+                            None => None,
+                        }
+                    }
+                    _ => None,
+                };
+                // if the available action is to declare the answer correct it is false right now
+                let hintlabelclass = if *correct {
+                    "hintlabel hintlabel_invalid"
+                } else {
+                    "hintlabel hintlabel_valid"
+                };
+                let judging = match guess {
+                    Some(guess) => {
+                        html! {
+                            <div class="hintline">
+                                <div class={hintlabelclass}>
+                                {guess}
+                                </div>
+                                <div>
+                                <button onclick=self.link.callback(send_flip_guess_validity) class="button actionbutton judgeguessbutton">
+                                {flip_label}
+                                </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                    None => {
+                        html! {
+                            <>
+                                {"Es wurde nicht geraten."}
+                            </>
+                        }
+                    }
+                };
+                judging
             }
             common::game::Action::FinishJudging(id) => {
                 let id = *id;
@@ -321,7 +375,7 @@ impl Component for Model {
                     move |_| Msg::WsSend(common::game::Action::FinishJudging(id));
                 html! {
                     <div>
-                        <button onclick=self.link.callback(send_finish_judging)>
+                        <button onclick=self.link.callback(send_finish_judging) class="button actionbutton finishjudgingbutton">
                         {"Runde abschliessen"}
                         </button>
                     </div>
@@ -332,7 +386,7 @@ impl Component for Model {
                 let send_leave = move |_| Msg::WsSend(common::game::Action::Leave(id));
                 html! {
                     <div>
-                        <button onclick=self.link.callback(send_leave)>
+                        <button onclick=self.link.callback(send_leave) class="button leavebutton">
                         { "Spiel verlassen" }
                         </button>
                     </div>
@@ -379,25 +433,14 @@ impl Component for Model {
             } else {
                 html! {
                     <p>
-                        { "Es ist noch niemand hier." }
+                        { "Es ist noch niemand hier" }
                     </p>
                 }
             };
-            if self.state.me.is_none() {
-                html! {
-                    <>
-                    <p>
-                        { "Teilnehmen?" }
-                    </p>
-                        { list_players }
-                    </>
-                }
-            } else {
-                html! {
+            html! {
                     <>
                         { list_players }
                     </>
-                }
             }
         };
 
@@ -439,9 +482,10 @@ impl Component for Model {
         };
 
         let prelude = match &self.state.phase {
-            game::VisibleGamePhase::GatherPlayers => {
-                html! { { "Das Spiel hat noch nicht angefangen." } }
-            }
+            game::VisibleGamePhase::GatherPlayers => match self.state.me {
+                Some(_) => html! { { "Das Spiel hat noch nicht angefangen." } },
+                None => html! { { "Noch nicht angemeldet." }},
+            },
             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Active(
                 hint_collection,
             )) => {
@@ -504,28 +548,7 @@ impl Component for Model {
                         {format!("Das gesuchte Wort war {}.", judging.word)}
                     </p>
                 };
-                let guess = match &judging.guess {
-                    Some(guess) => {
-                        let literal_guess = if judging.success.unwrap_or(false) {
-                            html! { {guess} }
-                        } else {
-                            html! { <s> {guess} </s> }
-                        };
-                        html! {
-                            <>
-                            <p>
-                                {{"Geraten:"}}
-                            </p>
-                            <p>
-                                { literal_guess }
-                            </p>
-                            </>
-                        }
-                    }
-                    None => {
-                        html! { { "Keine Antwort gegeben." }}
-                    }
-                };
+
                 let hint_line = |(author, hint): (&String, &game::Hint)| {
                     let content = if hint.allowed {
                         html! {
@@ -545,21 +568,20 @@ impl Component for Model {
                     }
                 };
                 let all_hints = html! {
-                    <table>
+                    <table class="allhints">
                         <thead>
                             <tr>
                                 <th colspan="2">{"Hinweise"}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            { for judging.hints.iter().map(hint_line) }
+                            { for itertools::sorted(judging.hints.iter()).map(hint_line) }
                         </tbody>
                     </table>
                 };
                 html! {
                     <>
                     { word }
-                    { guess }
                     { all_hints }
                     </>
                 }
@@ -569,7 +591,7 @@ impl Component for Model {
         if self.ws.is_none() {
             html! {
                 <div>
-                <button onclick=self.link.callback(|_| WsAction::Connect)>
+                <button onclick=self.link.callback(|_| WsAction::Connect) class="button connectbutton">
                 { "Verbinden" }
                 </button>
                 </div>
@@ -583,27 +605,26 @@ impl Component for Model {
                 .map(|a| to_html(a))
                 .next()
                 .unwrap_or(html! {});
-            // let state = format!("{:#?}", self.state);
             html! {
-                <div>
+                <div class="main">
                     // <p>
                     //     { format!("{:#?}", state) }
                     // </p>
-                    <p>
+                    <div class="prelude">
                         { prelude }
-                    </p>
-                    <p>
+                    </div>
+                    <div class="action">
                         { action_html }
-                    </p>
-                    <p>
+                    </div>
+                    <div class="state">
                         { state_html }
-                    </p>
-                    <p>
+                    </div>
+                    <div class="history">
                         { past_rounds_html }
-                    </p>
-                    <p>
+                    </div>
+                    <div class="leave">
                         { leave }
-                    </p>
+                    </div>
                 </div>
             }
         }

@@ -28,7 +28,7 @@ pub mod game {
         Leave(usize),
     }
 
-    #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+    #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Hint {
         pub content: String,
         pub allowed: bool,
@@ -206,7 +206,7 @@ pub mod game {
         }
     }
 
-    #[derive(Serialize, Deserialize, Debug, Clone)]
+    #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
     pub struct PastRound {
         pub name: String,
         pub word: String,
