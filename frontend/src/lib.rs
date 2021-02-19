@@ -196,200 +196,213 @@ impl Component for Model {
     }
 
     fn view(&self) -> Html {
-        let to_html = |action: &common::game::Action| match action {
-            common::game::Action::Join(id, _) => {
-                let cloned_id: usize = *id;
-                let send_name = move |e: ChangeData| match e {
-                    ChangeData::Value(value) => {
-                        Msg::WsSend(common::game::Action::Join(cloned_id, value))
+        let to_html = |action: &common::game::Action| {
+            let guess = match &self.state.phase {
+                game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
+                | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
+                    match &judging.guess {
+                        Some(guess) => Some(guess.clone()),
+                        None => None,
                     }
-                    _ => Msg::Ignore,
-                };
-                html! {
-                        <div>
-                            <label for="uname">{ "Mein Name: " }</label>
-                            <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
-                        </div>
                 }
-            }
-            common::game::Action::DisconnectPlayer(_id) => {
-                html! {
-                    <div>
-                        { "Das sollte nicht passieren (Verbindung explizit getrennt). Bitte neu laden." }
-                    </div>
-                }
-            }
-            common::game::Action::Start(id) => {
-                let cloned_id: usize = *id;
-                let send_start = move |_| Msg::WsSend(common::game::Action::Start(cloned_id));
-                html! {
-                    <div>
-                        <button onclick=self.link.callback(send_start) class="button actionbutton startbutton">
-                        {"Start"}
-                        </button>
-                    </div>
-                }
-            }
-            common::game::Action::GiveHint(id, _hint) => {
-                let cloned_id: usize = *id;
-                let send_hint = move |e: ChangeData| match e {
-                    ChangeData::Value(value) => {
-                        Msg::WsSend(common::game::Action::GiveHint(cloned_id, value))
-                    }
-                    _ => Msg::Ignore,
-                };
-                html! {
-                    <div>
-                        <label for="hint">{ "Hinweis: " }</label>
-                        <input type="text" id="hint" name="hint" onchange=self.link.callback(send_hint)/>
-                    </div>
-                }
-            }
-            common::game::Action::FilterHint(id, hint, valid) => {
-                let send_flip_hint_validity = {
-                    let id = *id;
-                    let hint = hint.clone();
-                    let valid = *valid;
-                    move |_| {
-                        let hint = hint.clone();
-                        Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
-                    }
-                };
-                let flip_label = {
-                    if *valid {
-                        "ungültig".to_string()
-                    } else {
-                        "gültig".to_string()
-                    }
-                };
-                let hintlabelclass = if *valid {
-                    "hintlabel hintlabel_valid"
-                } else {
-                    "hintlabel hintlabel_invalid"
-                };
-                html! {
-                    <div class="hintline">
-                        <div class={hintlabelclass}>
-                        {hint}
-                        </div>
-                        <div>
-                        <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
-                        {flip_label}
-                        </button>
-                        </div>
-                    </div>
-                }
-            }
-            common::game::Action::FinishHintFiltering(id) => {
-                let id = *id;
-                let send_finish_filtering =
-                    move |_| Msg::WsSend(common::game::Action::FinishHintFiltering(id));
-                html! {
-                    <div>
-                        <button onclick=self.link.callback(send_finish_filtering) class="button actionbutton proceedbutton">
-                        {"Hinweisbeurteilung abschliessen"}
-                        </button>
-                    </div>
-                }
-            }
-            common::game::Action::Guess(id, _) => {
-                let id: usize = *id;
-                let send_guess = move |e: ChangeData| match e {
-                    ChangeData::Value(value) => {
-                        Msg::WsSend(common::game::Action::Guess(id, Some(value)))
-                    }
-                    _ => Msg::Ignore,
-                };
-                let send_no_guess = move |_| Msg::WsSend(common::game::Action::Guess(id, None));
-                html! {
-                    <>
-                    <div>
-                        <label for="hint">{ "Ich rate: " }</label>
-                        <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
-                    </div>
-                    <div>
-                        <button onclick=self.link.callback(send_no_guess) class="button actionbutton guessbutton">
-                        {"Keine Ahnung"}
-                        </button>
-                    </div>
-                    </>
-                }
-            }
-            common::game::Action::Judge(id, correct) => {
-                let send_flip_guess_validity = {
-                    let id = *id;
-                    let correct = *correct;
-                    move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
-                };
-                let flip_label = {
-                    if *correct {
-                        "ist richtig".to_string()
-                    } else {
-                        "ist falsch".to_string()
-                    }
-                };
-                let guess = match &self.state.phase {
-                    game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
-                    | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
-                        match &judging.guess {
-                            Some(guess) => Some(guess.clone()),
-                            None => None,
+                _ => None,
+            };
+            match action {
+                common::game::Action::Join(id, _) => {
+                    let cloned_id: usize = *id;
+                    let send_name = move |e: ChangeData| match e {
+                        ChangeData::Value(value) => {
+                            Msg::WsSend(common::game::Action::Join(cloned_id, value))
                         }
-                    }
-                    _ => None,
-                };
-                // if the available action is to declare the answer correct it is false right now
-                let hintlabelclass = if *correct {
-                    "hintlabel hintlabel_invalid"
-                } else {
-                    "hintlabel hintlabel_valid"
-                };
-                let judging = match guess {
-                    Some(guess) => {
-                        html! {
-                            <div class="hintline">
-                                <div class={hintlabelclass}>
-                                {guess}
-                                </div>
-                                <div>
-                                <button onclick=self.link.callback(send_flip_guess_validity) class="button actionbutton judgeguessbutton">
-                                {flip_label}
-                                </button>
-                                </div>
+                        _ => Msg::Ignore,
+                    };
+                    html! {
+                            <div>
+                                <label for="uname">{ "Mein Name: " }</label>
+                                <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
                             </div>
-                        }
                     }
-                    None => {
-                        html! {
-                            <>
-                                {"Es wurde nicht geraten."}
-                            </>
-                        }
-                    }
-                };
-                judging
-            }
-            common::game::Action::FinishJudging(id) => {
-                let id = *id;
-                let send_finish_judging =
-                    move |_| Msg::WsSend(common::game::Action::FinishJudging(id));
-                html! {
-                    <div>
-                        <button onclick=self.link.callback(send_finish_judging) class="button actionbutton finishjudgingbutton">
-                        {"Runde abschliessen"}
-                        </button>
-                    </div>
                 }
-            }
-            common::game::Action::Leave(id) => {
-                let id = *id;
-                let send_leave = move |_| Msg::WsSend(common::game::Action::Leave(id));
-                html! {
-                    <div>
-                        <button onclick=self.link.callback(send_leave) class="button leavebutton">
-                        { "Spiel verlassen" }
-                        </button>
-                    </div>
+                common::game::Action::DisconnectPlayer(_id) => {
+                    html! {
+                        <div>
+                            { "Das sollte nicht passieren (Verbindung explizit getrennt). Bitte neu laden." }
+                        </div>
+                    }
+                }
+                common::game::Action::Start(id) => {
+                    let cloned_id: usize = *id;
+                    let send_start = move |_| Msg::WsSend(common::game::Action::Start(cloned_id));
+                    html! {
+                        <div>
+                            <button onclick=self.link.callback(send_start) class="button actionbutton startbutton">
+                            {"Start"}
+                            </button>
+                        </div>
+                    }
+                }
+                common::game::Action::GiveHint(id, _hint) => {
+                    let cloned_id: usize = *id;
+                    let send_hint = move |e: ChangeData| match e {
+                        ChangeData::Value(value) => {
+                            Msg::WsSend(common::game::Action::GiveHint(cloned_id, value))
+                        }
+                        _ => Msg::Ignore,
+                    };
+                    html! {
+                        <div>
+                            <label for="hint">{ "Hinweis: " }</label>
+                            <input type="text" id="hint" name="hint" onchange=self.link.callback(send_hint)/>
+                        </div>
+                    }
+                }
+                common::game::Action::FilterHint(id, hint, valid) => {
+                    let send_flip_hint_validity = {
+                        let id = *id;
+                        let hint = hint.clone();
+                        let valid = *valid;
+                        move |_| {
+                            let hint = hint.clone();
+                            Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
+                        }
+                    };
+                    let flip_label = {
+                        if *valid {
+                            "für ungültig erklären".to_string()
+                        } else {
+                            "für gültig erklären".to_string()
+                        }
+                    };
+                    let hintlabelclass = if *valid {
+                        "hintlabel hintlabel_valid"
+                    } else {
+                        "hintlabel hintlabel_invalid"
+                    };
+                    html! {
+                        <div class="hintline">
+                            <div class={hintlabelclass}>
+                            {hint}
+                            </div>
+                            <div>
+                            <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
+                            {flip_label}
+                            </button>
+                            </div>
+                        </div>
+                    }
+                }
+                common::game::Action::FinishHintFiltering(id) => {
+                    let id = *id;
+                    let send_finish_filtering =
+                        move |_| Msg::WsSend(common::game::Action::FinishHintFiltering(id));
+                    html! {
+                        <div>
+                            <button onclick=self.link.callback(send_finish_filtering) class="button actionbutton proceedbutton">
+                            {"Hinweisbeurteilung abschliessen"}
+                            </button>
+                        </div>
+                    }
+                }
+                common::game::Action::Guess(id, _) => {
+                    let id: usize = *id;
+                    let send_guess = move |e: ChangeData| match e {
+                        ChangeData::Value(value) => {
+                            Msg::WsSend(common::game::Action::Guess(id, Some(value)))
+                        }
+                        _ => Msg::Ignore,
+                    };
+                    let send_no_guess = move |_| Msg::WsSend(common::game::Action::Guess(id, None));
+                    html! {
+                        <>
+                        <div>
+                            <label for="hint">{ "Ich rate: " }</label>
+                            <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
+                        </div>
+                        <div>
+                            <button onclick=self.link.callback(send_no_guess) class="button actionbutton guessbutton">
+                            {"Keine Ahnung"}
+                            </button>
+                        </div>
+                        </>
+                    }
+                }
+                common::game::Action::Judge(id, correct) => {
+                    let send_flip_guess_validity = {
+                        let id = *id;
+                        let correct = *correct;
+                        move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
+                    };
+                    let flip_label = {
+                        if *correct {
+                            "für richtig erklären".to_string()
+                        } else {
+                            "für falsch erklären".to_string()
+                        }
+                    };
+                    // if the available action is to declare the answer correct it is false right now
+                    let hintlabelclass = if *correct {
+                        "hintlabel hintlabel_invalid"
+                    } else {
+                        "hintlabel hintlabel_valid"
+                    };
+                    match guess {
+                        Some(guess) => {
+                            html! {
+                                <div class="hintline">
+                                    <div class={hintlabelclass}>
+                                    {guess}
+                                    </div>
+                                    <div>
+                                    <button onclick=self.link.callback(send_flip_guess_validity) class="button actionbutton judgeguessbutton">
+                                    {flip_label}
+                                    </button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        None => {
+                            eprintln!("judging action but there is no guess");
+                            html! {
+                                <></>
+                            }
+                        }
+                    }
+                }
+                common::game::Action::FinishJudging(id) => {
+                    let id = *id;
+                    let send_finish_judging =
+                        move |_| Msg::WsSend(common::game::Action::FinishJudging(id));
+                    let noguess = match guess {
+                        Some(_) => html! {<></>},
+                        None => {
+                            html! {
+                                <div class="hintline">
+                                    {"Es wurde nicht geraten."}
+                                </div>
+                            }
+                        }
+                    };
+                    html! {
+                        <>
+                        { noguess }
+                        <div>
+                            <button onclick=self.link.callback(send_finish_judging) class="button actionbutton finishjudgingbutton">
+                            {"Runde abschliessen"}
+                            </button>
+                        </div>
+                        </>
+                    }
+                }
+                common::game::Action::Leave(id) => {
+                    let id = *id;
+                    let send_leave = move |_| Msg::WsSend(common::game::Action::Leave(id));
+                    html! {
+                        <div>
+                            <button onclick=self.link.callback(send_leave) class="button leavebutton">
+                            { "Spiel verlassen" }
+                            </button>
+                        </div>
+                    }
                 }
             }
         };
@@ -433,7 +446,7 @@ impl Component for Model {
             } else {
                 html! {
                     <p>
-                        { "Es ist noch niemand hier" }
+                        { "Es ist noch niemand hier." }
                     </p>
                 }
             };

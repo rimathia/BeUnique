@@ -6,7 +6,7 @@ html, body {
 .main {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: 500px;
   font-family: "Gill Sans", sans-serif;
   font-size: larger;
   padding: 20px;
@@ -32,14 +32,20 @@ html, body {
   padding: 5px;
   display: flex;
   flex-direction: row;
+  justify-content: space-between;
 }
 
 .hintlabel {
-  width: 20%;
+  padding: 2px;
+}
+
+.hintlabel_valid {
+  background-color: rgb(101, 228, 62);
 }
 
 .hintlabel_invalid {
   text-decoration: line-through;
+  background-color: rgb(255, 153, 153);
 }
 
 .allhints {

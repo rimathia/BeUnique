@@ -2,6 +2,7 @@ use futures::join;
 use rand::thread_rng;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 use warp::Filter;
 
@@ -10,26 +11,42 @@ extern crate common;
 /// Our global unique user id counter.
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 
+fn read_words(filename: &Path) -> Result<Vec<String>, std::io::Error> {
+    std::fs::File::open(filename).and_then(|f| {
+        Ok(BufReader::new(f)
+            .lines()
+            .filter_map(|l| match l {
+                Ok(line) => {
+                    if line.find(|c: char| !c.is_whitespace()).is_some() {
+                        Some(line)
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            })
+            .collect())
+    })
+}
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
-
     let users = models::Users::default();
-    let filename = "words.txt";
-    let maybe_words: Result<std::vec::Vec<std::string::String>, std::io::Error> =
-        std::fs::File::open(filename)
-            .and_then(|f| Ok(BufReader::new(f).lines().filter_map(Result::ok).collect()));
 
     use common::game::Dictionary;
     use rand::seq::SliceRandom;
-    let dictionary = match maybe_words {
+    let filename = Path::new("../words.txt");
+    let dictionary = match read_words(filename) {
         Ok(mut words) => {
             if words.len() > 0 {
                 let mut rng = thread_rng();
                 words.shuffle(&mut rng);
                 Dictionary::new(words)
             } else {
-                eprintln!("read 0 words from {:?}, using default dictionary", filename);
+                eprintln!(
+                    "read 0 words from {:?}, using default dictionary",
+                    filename.canonicalize()
+                );
                 Dictionary::default()
             }
         }
