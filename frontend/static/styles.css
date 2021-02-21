@@ -47,6 +47,42 @@ html, body {
   text-decoration: line-through;
   background-color: rgb(255, 153, 153);
 }
+/* https://stackoverflow.com/questions/4271463/how-to-style-a-disabled-checkbox */
+/* checkboxes are repurposed as radio buttons */
+input[type="checkbox"] {
+  display: none;
+}
+
+label:before {
+  /*background: linear-gradient(to bottom, #fff 0px, #e6e6e6 100%) repeat scroll 0 0 rgba(0, 0, 0, 0); */
+  border: 1px solid;
+  height: 13px;
+  width: 13px;
+  /*display: inline;*/
+  /*cursor: pointer; */
+  box-sizing: border-box;
+  /*padding: 5x;*/
+}
+input[type="checkbox"] + label:before {
+  content: '✓';
+  /*background: linear-gradient(to bottom, #e6e6e6 0px, #fff 100%) repeat scroll 0 0 rgba(0, 0, 0, 0);*/
+  border-color:black;
+  color: white;
+  font: white;
+  font-size: 13px;
+  /*line-height: 12px;*/
+  text-align: center;
+}
+
+input[type="checkbox"]:disabled + label:before {
+  /* border-color: white; */
+  color: black;
+  /* background: linear-gradient(to top, #e6e6e6 0px, #fff 100%) repeat scroll 0 0 rgba(0, 0, 0, 0); */
+}
+
+input[type="checkbox"]:checked + label:before {
+  content: '✓';
+}
 
 .allhints {
   text-align: left;

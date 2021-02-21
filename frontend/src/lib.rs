@@ -257,26 +257,43 @@ impl Component for Model {
                     }
                 }
                 common::game::Action::FilterHint(id, hint, valid) => {
-                    let send_flip_hint_validity = {
-                        let id = *id;
-                        let hint = hint.clone();
-                        let valid = *valid;
-                        move |_| {
+                    // let send_flip_hint_validity = {
+                    //     let id = *id;
+                    //     let hint = hint.clone();
+                    //     let valid = *valid;
+                    //     move |_| {
+                    //         let hint = hint.clone();
+                    //         Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
+                    //     }
+                    // };
+                    let send_hint = |valid| {
+                        {
+                            let id = *id;
                             let hint = hint.clone();
-                            Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
-                        }
+                            return move |c: yew::ChangeData| {
+                                log::info!("ChangeData: {:?}, valid: {:?}", c, valid);
+                                let hint = hint.clone();
+                                Msg::WsSend(common::game::Action::FilterHint(id, hint, valid))
+                            };
+                        };
                     };
-                    let flip_label = {
-                        if *valid {
-                            "für ungültig erklären".to_string()
-                        } else {
-                            "für gültig erklären".to_string()
-                        }
-                    };
+                    // let flip_label = {
+                    //     if *valid {
+                    //         "für ungültig erklären".to_string()
+                    //     } else {
+                    //         "für gültig erklären".to_string()
+                    //     }
+                    // };
                     let hintlabelclass = if *valid {
                         "hintlabel hintlabel_valid"
                     } else {
                         "hintlabel hintlabel_invalid"
+                    };
+                    let radio = html! {
+                        <>
+                            <input type="checkbox" class="pseudoradio" id="valid" name={hint} checked=*valid disabled=*valid onchange=self.link.callback(send_hint(!*valid))/> <label for="valid">{" gültig "}</label>
+                            <input type="checkbox" class="pseudoradio" id="invalid" name={hint} checked=!*valid disabled=!*valid onchange=self.link.callback(send_hint(!*valid))/> <label for="invalid">{" ungültig "}</label>
+                        </>
                     };
                     html! {
                         <div class="hintline">
@@ -284,9 +301,10 @@ impl Component for Model {
                             {hint}
                             </div>
                             <div>
-                            <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
-                            {flip_label}
-                            </button>
+                            // <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
+                            // {flip_label}
+                            // </button>
+                            {radio}
                             </div>
                         </div>
                     }
@@ -646,5 +664,6 @@ impl Component for Model {
 
 #[wasm_bindgen(start)]
 pub fn run_app() {
+    wasm_logger::init(wasm_logger::Config::default());
     App::<Model>::new().mount_to_body();
 }

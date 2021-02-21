@@ -16,6 +16,9 @@ common = { path = "../common" }
 
 anyhow = "1.0.37"
 itertools = ">=0.10"
+log = "0.4"
 serde_json = "1.0"
+# uuid = {version = "0.8", features=["v4", "wasm-bindgen"]}
 wasm-bindgen = "0.2.67"
+wasm-logger = "0.2.0"
 yew = "0.17"
