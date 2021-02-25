@@ -19,7 +19,7 @@ pub mod game {
         Join(usize, String),
         DisconnectPlayer(usize),
         Start(usize),
-        GiveHint(usize, String),
+        GiveHint(usize, Option<String>),
         FilterHint(usize, String, bool),
         FinishHintFiltering(usize),
         Guess(usize, Option<String>),
@@ -46,6 +46,7 @@ pub mod game {
     }
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct InactiveHintCollection {
+        pub active_player: String,
         pub word: String,
         pub hint: Option<Hint>,
         pub players_done: Vec<String>,
@@ -68,19 +69,9 @@ pub mod game {
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
-    pub struct InactiveHintFiltering(HintFiltering);
-
-    impl core::ops::Deref for InactiveHintFiltering {
-        type Target = HintFiltering;
-
-        fn deref(self: &Self) -> &Self::Target {
-            &self.0
-        }
-    }
-    impl core::ops::DerefMut for InactiveHintFiltering {
-        fn deref_mut(self: &mut Self) -> &mut Self::Target {
-            &mut self.0
-        }
+    pub struct InactiveHintFiltering {
+        pub active_player: String,
+        pub hint_filtering: HintFiltering,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -125,7 +116,10 @@ pub mod game {
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
-    pub struct InactiveGuessing(Guessing);
+    pub struct InactiveGuessing {
+        pub active_player: String,
+        pub guessing: Guessing,
+    }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub enum VisibleGuessing {
@@ -139,11 +133,16 @@ pub mod game {
         pub guess: Option<String>,
         pub success: Option<bool>,
     }
+    #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+    pub struct InactiveJudging {
+        pub active_player: String,
+        pub judging: Judging,
+    }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub enum VisibleJudging {
         Active(Judging),
-        Inactive(Judging),
+        Inactive(InactiveJudging),
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -257,7 +256,9 @@ pub mod game {
                 Action::Join(new_id, new_name) => self.join(*new_id, new_name),
                 Action::DisconnectPlayer(id) => self.disconnect_player(*id),
                 Action::Start(_id) => self.start(),
-                Action::GiveHint(id, hint) => self.process_hint(*id, hint),
+                Action::GiveHint(id, hint) => {
+                    self.process_hint(*id, (*hint).as_ref().map(|s| s.as_str()))
+                }
                 Action::FilterHint(id, hint, valid) => self.process_hint_filter(*id, hint, *valid),
                 Action::FinishHintFiltering(id) => self.process_finish_hint_filter(*id),
                 Action::Guess(id, guess) => self.process_guess(*id, guess),
@@ -304,6 +305,14 @@ pub mod game {
             self.players.iter().find(|p| p.id == Some(id))
         }
 
+        fn active_player(&self) -> Option<&Player> {
+            Some(&self.players[self.active_index?])
+        }
+
+        fn active_player_name(&self) -> Option<String> {
+            self.active_player().map(|p| p.name.clone())
+        }
+
         fn start(&mut self) -> Option<()> {
             match &mut self.phase {
                 GamePhase::GatherPlayers => {
@@ -320,19 +329,26 @@ pub mod game {
             }
         }
 
-        fn process_hint(&mut self, id: usize, hint: &str) -> Option<()> {
+        fn process_hint(&mut self, id: usize, hint: Option<&str>) -> Option<()> {
             let submitter_index = self.player_index(id)?;
             let submitter = &self.players[submitter_index];
             match &mut self.phase {
                 GamePhase::HintCollection(hint_collection) => {
                     if submitter_index != self.active_index? {
-                        hint_collection.hints.insert(
-                            submitter.name.clone(),
-                            Hint {
-                                content: hint.to_string(),
-                                allowed: true,
-                            },
-                        );
+                        match hint {
+                            Some(hint) => {
+                                hint_collection.hints.insert(
+                                    submitter.name.clone(),
+                                    Hint {
+                                        content: hint.to_string(),
+                                        allowed: true,
+                                    },
+                                );
+                            }
+                            None => {
+                                hint_collection.hints.remove_entry(submitter.name.as_str());
+                            }
+                        }
                         if hint_collection.hints.len() == self.players.len() - 1 {
                             self.phase = GamePhase::HintFiltering(HintFiltering {
                                 word: hint_collection.word.clone(),
@@ -533,7 +549,7 @@ pub mod game {
                         }
                         GamePhase::HintCollection(_) => {
                             if !active {
-                                vec![Action::GiveHint(id, String::new())]
+                                vec![Action::GiveHint(id, None)]
                             } else {
                                 vec![]
                             }
@@ -601,6 +617,9 @@ pub mod game {
                                 let own_hint = hints.get(&player.name).cloned();
                                 VisibleGamePhase::HintCollection(VisibleHintCollection::Inactive(
                                     InactiveHintCollection {
+                                        active_player: self
+                                            .active_player_name()
+                                            .unwrap_or(String::new()),
                                         word: word.clone(),
                                         hint: own_hint,
                                         players_done: done,
@@ -621,10 +640,15 @@ pub mod game {
                                 ))
                             } else {
                                 VisibleGamePhase::HintFiltering(VisibleHintFiltering::Inactive(
-                                    InactiveHintFiltering(HintFiltering {
-                                        word: word.clone(),
-                                        hints: hints.clone(),
-                                    }),
+                                    InactiveHintFiltering {
+                                        active_player: self
+                                            .active_player_name()
+                                            .unwrap_or(String::new()),
+                                        hint_filtering: HintFiltering {
+                                            word: word.clone(),
+                                            hints: hints.clone(),
+                                        },
+                                    },
                                 ))
                             }
                         }
@@ -644,11 +668,16 @@ pub mod game {
                                 ))
                             } else {
                                 VisibleGamePhase::Guessing(VisibleGuessing::Inactive(
-                                    InactiveGuessing(Guessing {
-                                        word: word.clone(),
-                                        hints: hints.clone(),
-                                        guess: guess.clone(),
-                                    }),
+                                    InactiveGuessing {
+                                        active_player: self
+                                            .active_player_name()
+                                            .unwrap_or(String::new()),
+                                        guessing: Guessing {
+                                            word: word.clone(),
+                                            hints: hints.clone(),
+                                            guess: guess.clone(),
+                                        },
+                                    },
                                 ))
                             }
                         }
@@ -656,7 +685,14 @@ pub mod game {
                             if active {
                                 VisibleGamePhase::Judging(VisibleJudging::Active(judging.clone()))
                             } else {
-                                VisibleGamePhase::Judging(VisibleJudging::Inactive(judging.clone()))
+                                VisibleGamePhase::Judging(VisibleJudging::Inactive(
+                                    InactiveJudging {
+                                        active_player: self
+                                            .active_player_name()
+                                            .unwrap_or(String::new()),
+                                        judging: judging.clone(),
+                                    },
+                                ))
                             }
                         }
                     }

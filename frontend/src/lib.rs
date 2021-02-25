@@ -9,99 +9,6 @@ use yew::services::websocket::{WebSocketService, WebSocketStatus, WebSocketTask}
 extern crate common;
 use common::game;
 
-// doesn't work at all up to now
-// #[derive(Properties, Clone, PartialEq)]
-// struct PastRoundProperties {
-//     g: game::PastRound,
-// }
-//
-// struct PastRound {
-//     props: PastRoundProperties,
-// }
-//
-// impl Component for PastRound {
-//     type Message = ();
-//     type Properties = PastRoundProperties;
-//
-//     fn create(props: Self::Properties, _link: ComponentLink<Self>) -> Self {
-//         PastRound { props }
-//     }
-//
-//     fn view(&self) -> Html {
-//         let text = if self.props.g.success {
-//             format!(
-//                 "{} hat \"{}\" erraten",
-//                 self.props.g.name, self.props.g.word
-//             )
-//         } else {
-//             format!(
-//                 "{} hat \"{}\" nicht erraten",
-//                 self.props.g.name, self.props.g.word
-//             )
-//         };
-//         html! {
-//             <div>
-//                 { text }
-//             </div>
-//         }
-//     }
-//
-//     fn update(&mut self, _msg: Self::Message) -> ShouldRender {
-//         false
-//     }
-//
-//     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-//         if self.props != props {
-//             self.props = props;
-//             true
-//         } else {
-//             false
-//         }
-//     }
-// }
-//
-// #[derive(Properties, Clone, PartialEq)]
-// struct PastRoundsProperties {
-//     #[prop_or_default]
-//     pub children: ChildrenWithProps<PastRound>,
-// }
-//
-// struct PastRounds {
-//     props: PastRoundsProperties,
-// }
-//
-// impl Component for PastRounds {
-//     type Message = ();
-//
-//     type Properties = PastRoundsProperties;
-//
-//     fn create(props: Self::Properties, _link: ComponentLink<Self>) -> Self {
-//         Self { props }
-//     }
-//
-//     fn update(&mut self, _msg: Self::Message) -> ShouldRender {
-//         false
-//     }
-//
-//     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-//         if self.props != props {
-//             self.props = props;
-//             true
-//         } else {
-//             false
-//         }
-//     }
-//
-//     fn view(&self) -> Html {
-//         html! {
-//         <div>
-//         {
-//             for self.props.children.iter()
-//         }
-//         </div>}
-//     }
-// }
-
 struct Model {
     link: ComponentLink<Self>,
     state: game::PlayerView,
@@ -199,12 +106,9 @@ impl Component for Model {
         let to_html = |action: &common::game::Action| {
             let guess = match &self.state.phase {
                 game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
-                | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
-                    match &judging.guess {
-                        Some(guess) => Some(guess.clone()),
-                        None => None,
-                    }
-                }
+                | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(
+                    game::InactiveJudging { judging, .. },
+                )) => judging.guess.clone(),
                 _ => None,
             };
             match action {
@@ -212,14 +116,18 @@ impl Component for Model {
                     let cloned_id: usize = *id;
                     let send_name = move |e: ChangeData| match e {
                         ChangeData::Value(value) => {
-                            Msg::WsSend(common::game::Action::Join(cloned_id, value))
+                            if !value.trim().is_empty() {
+                                Msg::WsSend(common::game::Action::Join(cloned_id, value))
+                            } else {
+                                Msg::Ignore
+                            }
                         }
                         _ => Msg::Ignore,
                     };
                     html! {
                             <div>
                                 <label for="uname">{ "Mein Name: " }</label>
-                                <input type="text" id="uname" name="name" onchange=self.link.callback(send_name)/>
+                                <input type="text" id="uname" name="name" autocomplete="off" onchange=self.link.callback(send_name)/>
                             </div>
                     }
                 }
@@ -245,54 +153,73 @@ impl Component for Model {
                     let cloned_id: usize = *id;
                     let send_hint = move |e: ChangeData| match e {
                         ChangeData::Value(value) => {
-                            Msg::WsSend(common::game::Action::GiveHint(cloned_id, value))
+                            let trimmed = value.trim();
+                            let hint = if trimmed.is_empty() {
+                                None
+                            } else {
+                                Some(trimmed.to_string())
+                            };
+                            Msg::WsSend(common::game::Action::GiveHint(cloned_id, hint))
                         }
                         _ => Msg::Ignore,
                     };
                     html! {
                         <div>
                             <label for="hint">{ "Hinweis: " }</label>
-                            <input type="text" id="hint" name="hint" onchange=self.link.callback(send_hint)/>
+                            <input type="text" id="hint" name="hint" autocomplete="off" onchange=self.link.callback(send_hint)/>
                         </div>
                     }
                 }
                 common::game::Action::FilterHint(id, hint, valid) => {
-                    // let send_flip_hint_validity = {
-                    //     let id = *id;
-                    //     let hint = hint.clone();
-                    //     let valid = *valid;
-                    //     move |_| {
-                    //         let hint = hint.clone();
-                    //         Msg::WsSend(common::game::Action::FilterHint(id, hint, !valid))
-                    //     }
+                    log::info!("to_html on FilterHint: {:?}, {:?}, {:?}", id, hint, valid);
+                    // let send_hint = |valid, localhint: String| {
+                    //     {
+                    //         log::info!("send_hint, valid={}, hint={}", valid, localhint);
+                    //         let id = *id;
+                    //         return move |c: yew::ChangeData| {
+                    //             log::info!(
+                    //                 "ChangeData: {:?}, valid: {:?}, hint: {:?}",
+                    //                 c,
+                    //                 valid,
+                    //                 localhint
+                    //             );
+                    //             Msg::WsSend(common::game::Action::FilterHint(
+                    //                 id,
+                    //                 localhint.clone(),
+                    //                 valid,
+                    //             ))
+                    //         };
+                    //     };
                     // };
-                    let send_hint = |valid| {
-                        {
-                            let id = *id;
-                            let hint = hint.clone();
-                            return move |c: yew::ChangeData| {
-                                log::info!("ChangeData: {:?}, valid: {:?}", c, valid);
-                                let hint = hint.clone();
-                                Msg::WsSend(common::game::Action::FilterHint(id, hint, valid))
-                            };
-                        };
+                    let flip_hint = {
+                        let id_loc = *id;
+                        let hint_loc = hint.clone();
+                        let valid_loc = *valid;
+                        move |_: yew::ChangeData| {
+                            log::info!(
+                                "id_loc: {}, hint_loc: {}, valid_loc: {}",
+                                id_loc,
+                                hint_loc,
+                                valid_loc
+                            );
+                            Msg::WsSend(common::game::Action::FilterHint(
+                                id_loc,
+                                hint_loc.clone(),
+                                !valid_loc,
+                            ))
+                        }
                     };
-                    // let flip_label = {
-                    //     if *valid {
-                    //         "für ungültig erklären".to_string()
-                    //     } else {
-                    //         "für gültig erklären".to_string()
-                    //     }
-                    // };
                     let hintlabelclass = if *valid {
                         "hintlabel hintlabel_valid"
                     } else {
                         "hintlabel hintlabel_invalid"
                     };
+                    let valid_id = format!("{}_valid", hint);
+                    let invalid_id = format!("{}_invalid", hint);
                     let radio = html! {
                         <>
-                            <input type="checkbox" class="pseudoradio" id="valid" name={hint} checked=*valid disabled=*valid onchange=self.link.callback(send_hint(!*valid))/> <label for="valid">{" gültig "}</label>
-                            <input type="checkbox" class="pseudoradio" id="invalid" name={hint} checked=!*valid disabled=!*valid onchange=self.link.callback(send_hint(!*valid))/> <label for="invalid">{" ungültig "}</label>
+                            <input type="checkbox" class="pseudoradio" id={valid_id.clone()} name={hint} checked=*valid disabled=*valid onchange=self.link.callback(flip_hint.clone())/> <label for={valid_id.clone()}>{" gültig "}</label>
+                            <input type="checkbox" class="pseudoradio" id={invalid_id.clone()} name={hint} checked=!*valid disabled=!*valid onchange=self.link.callback(flip_hint.clone())/> <label for={invalid_id.clone()}>{" ungültig "}</label>
                         </>
                     };
                     html! {
@@ -301,9 +228,6 @@ impl Component for Model {
                             {hint}
                             </div>
                             <div>
-                            // <button onclick=self.link.callback(send_flip_hint_validity) class="button actionbutton hintbutton">
-                            // {flip_label}
-                            // </button>
                             {radio}
                             </div>
                         </div>
@@ -334,9 +258,9 @@ impl Component for Model {
                         <>
                         <div>
                             <label for="hint">{ "Ich rate: " }</label>
-                            <input type="text" id="guess" name="guess" onchange=self.link.callback(send_guess)/>
+                            <input type="text" id="guess" name="guess" autocomplete="off" onchange=self.link.callback(send_guess)/>
                         </div>
-                        <div>
+                        <div style="padding-top: 5px">
                             <button onclick=self.link.callback(send_no_guess) class="button actionbutton guessbutton">
                             {"Keine Ahnung"}
                             </button>
@@ -345,35 +269,52 @@ impl Component for Model {
                     }
                 }
                 common::game::Action::Judge(id, correct) => {
-                    let send_flip_guess_validity = {
-                        let id = *id;
-                        let correct = *correct;
-                        move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
-                    };
-                    let flip_label = {
-                        if *correct {
-                            "für richtig erklären".to_string()
-                        } else {
-                            "für falsch erklären".to_string()
-                        }
-                    };
-                    // if the available action is to declare the answer correct it is false right now
-                    let hintlabelclass = if *correct {
-                        "hintlabel hintlabel_invalid"
-                    } else {
-                        "hintlabel hintlabel_valid"
-                    };
+                    // let send_flip_guess_validity = {
+                    //     let id = *id;
+                    //     let correct = *correct;
+                    //     move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
+                    // };
+                    // let flip_label = {
+                    //     if *correct {
+                    //         "für richtig erklären".to_string()
+                    //     } else {
+                    //         "für falsch erklären".to_string()
+                    //     }
+                    // };
+                    // // if the available action is to declare the answer correct it is false right now
+                    // let hintlabelclass = if *correct {
+                    //     "hintlabel hintlabel_invalid"
+                    // } else {
+                    //     "hintlabel hintlabel_valid"
+                    // };
                     match guess {
                         Some(guess) => {
+                            let send_judgement = |correct: bool| {
+                                {
+                                    let id = *id;
+                                    return move |_: yew::ChangeData| {
+                                        Msg::WsSend(common::game::Action::Judge(id, correct))
+                                    };
+                                };
+                            };
+                            let hintlabelclass = if *correct {
+                                "hintlabel hintlabel_valid"
+                            } else {
+                                "hintlabel hintlabel_invalid"
+                            };
+                            let radio = html! {
+                                <>
+                                    <input type="checkbox" class="pseudoradio" id="valid" name={guess.clone()} checked=*correct disabled=*correct onchange=self.link.callback(send_judgement(!*correct))/> <label for="valid">{" richtig"}</label>
+                                    <input type="checkbox" class="pseudoradio" id="invalid" name={guess.clone()} checked=!*correct disabled=!*correct onchange=self.link.callback(send_judgement(!*correct))/> <label for="invalid">{" falsch"}</label>
+                                </>
+                            };
                             html! {
                                 <div class="hintline">
                                     <div class={hintlabelclass}>
                                     {guess}
                                     </div>
                                     <div>
-                                    <button onclick=self.link.callback(send_flip_guess_validity) class="button actionbutton judgeguessbutton">
-                                    {flip_label}
-                                    </button>
+                                    {radio}
                                     </div>
                                 </div>
                             }
@@ -536,10 +477,19 @@ impl Component for Model {
             }
             game::VisibleGamePhase::HintCollection(game::VisibleHintCollection::Inactive(
                 hint_collection,
-            )) => html! { { format!(
-                "Bitte gib einen Hinweis für \"{}\".",
-                hint_collection.word
-            ) } },
+            )) => match &hint_collection.hint {
+                Some(hint) => {
+                    html! {
+                        { format!("Möchtest du deinen Hinweis \"{}\" für \"{}\" ändern?", hint.content, hint_collection.word) }
+                    }
+                }
+                None => {
+                    html! { { format!(
+                        "Bitte gib einen Hinweis für \"{}\".",
+                        hint_collection.word)
+                    }}
+                }
+            },
             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Active(
                 hint_filtering,
             )) => html! { { format!(
@@ -547,7 +497,7 @@ impl Component for Model {
                 hint_filtering.players_valid_hints.len()
             ) } },
             game::VisibleGamePhase::HintFiltering(game::VisibleHintFiltering::Inactive(
-                hint_filtering,
+                game::InactiveHintFiltering { hint_filtering, .. },
             )) => {
                 html! { { format!("Welche Hinweise für \"{}\" sind gültig?", hint_filtering.word) } }
             }
@@ -569,14 +519,16 @@ impl Component for Model {
                     </>
                 }
             }
-            game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(_)) => {
-                html! { { "Wir warten bis geraten wurde." } }
+            game::VisibleGamePhase::Guessing(game::VisibleGuessing::Inactive(j)) => {
+                html! { { format!("Wir warten bis {} geraten hat.", j.active_player) } }
             }
             game::VisibleGamePhase::Judging(game::VisibleJudging::Active(judging))
-            | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(judging)) => {
+            | game::VisibleGamePhase::Judging(game::VisibleJudging::Inactive(
+                game::InactiveJudging { judging, .. },
+            )) => {
                 let word = html! {
                     <p>
-                        {format!("Das gesuchte Wort war {}.", judging.word)}
+                        {format!("Das gesuchte Wort war \"{}\".", judging.word)}
                     </p>
                 };
 
