@@ -170,46 +170,28 @@ impl Component for Model {
                         </div>
                     }
                 }
-                common::game::Action::FilterHint(id, hint, valid) => {
-                    log::info!("to_html on FilterHint: {:?}, {:?}, {:?}", id, hint, valid);
-                    // let send_hint = |valid, localhint: String| {
-                    //     {
-                    //         log::info!("send_hint, valid={}, hint={}", valid, localhint);
-                    //         let id = *id;
-                    //         return move |c: yew::ChangeData| {
-                    //             log::info!(
-                    //                 "ChangeData: {:?}, valid: {:?}, hint: {:?}",
-                    //                 c,
-                    //                 valid,
-                    //                 localhint
-                    //             );
-                    //             Msg::WsSend(common::game::Action::FilterHint(
-                    //                 id,
-                    //                 localhint.clone(),
-                    //                 valid,
-                    //             ))
-                    //         };
-                    //     };
-                    // };
+                common::game::Action::FilterHint(id, hint, change_validity_to) => {
+                    // log::info!("to_html on FilterHint: {:?}, {:?}, {:?}", id, hint, valid);
                     let flip_hint = {
-                        let id_loc = *id;
-                        let hint_loc = hint.clone();
-                        let valid_loc = *valid;
+                        let id = *id;
+                        let hint = hint.clone();
+                        let change_validity_to = *change_validity_to;
                         move |_: yew::ChangeData| {
-                            log::info!(
-                                "id_loc: {}, hint_loc: {}, valid_loc: {}",
-                                id_loc,
-                                hint_loc,
-                                valid_loc
-                            );
+                            // log::info!(
+                            //     "id_loc: {}, hint_loc: {}, valid_loc: {}",
+                            //     id_loc,
+                            //     hint_loc,
+                            //     valid_loc
+                            // );
                             Msg::WsSend(common::game::Action::FilterHint(
-                                id_loc,
-                                hint_loc.clone(),
-                                !valid_loc,
+                                id,
+                                hint.clone(),
+                                change_validity_to,
                             ))
                         }
                     };
-                    let hintlabelclass = if *valid {
+                    let is_valid = !change_validity_to;
+                    let hintlabelclass = if is_valid {
                         "hintlabel hintlabel_valid"
                     } else {
                         "hintlabel hintlabel_invalid"
@@ -218,8 +200,13 @@ impl Component for Model {
                     let invalid_id = format!("{}_invalid", hint);
                     let radio = html! {
                         <>
-                            <input type="checkbox" class="pseudoradio" id={valid_id.clone()} name={hint} checked=*valid disabled=*valid onchange=self.link.callback(flip_hint.clone())/> <label for={valid_id.clone()}>{" gültig "}</label>
-                            <input type="checkbox" class="pseudoradio" id={invalid_id.clone()} name={hint} checked=!*valid disabled=!*valid onchange=self.link.callback(flip_hint.clone())/> <label for={invalid_id.clone()}>{" ungültig "}</label>
+                            <input type="checkbox" class="pseudoradio" id={valid_id.clone()}
+                                name={hint} checked=is_valid disabled=is_valid
+                                style="padding-left: 5px;"
+                                onchange=self.link.callback(flip_hint.clone())/> <label for={valid_id.clone()}>{" gültig "}</label>
+                            <input type="checkbox" class="pseudoradio" id={invalid_id.clone()}
+                                name={hint} checked=!is_valid disabled=!is_valid
+                                onchange=self.link.callback(flip_hint.clone())/> <label for={invalid_id.clone()}>{" ungültig "}</label>
                         </>
                     };
                     html! {
@@ -268,65 +255,51 @@ impl Component for Model {
                         </>
                     }
                 }
-                common::game::Action::Judge(id, correct) => {
-                    // let send_flip_guess_validity = {
-                    //     let id = *id;
-                    //     let correct = *correct;
-                    //     move |_| Msg::WsSend(common::game::Action::Judge(id, correct))
-                    // };
-                    // let flip_label = {
-                    //     if *correct {
-                    //         "für richtig erklären".to_string()
-                    //     } else {
-                    //         "für falsch erklären".to_string()
-                    //     }
-                    // };
-                    // // if the available action is to declare the answer correct it is false right now
-                    // let hintlabelclass = if *correct {
-                    //     "hintlabel hintlabel_invalid"
-                    // } else {
-                    //     "hintlabel hintlabel_valid"
-                    // };
-                    match guess {
-                        Some(guess) => {
-                            let send_judgement = |correct: bool| {
-                                {
-                                    let id = *id;
-                                    return move |_: yew::ChangeData| {
-                                        Msg::WsSend(common::game::Action::Judge(id, correct))
-                                    };
-                                };
-                            };
-                            let hintlabelclass = if *correct {
-                                "hintlabel hintlabel_valid"
-                            } else {
-                                "hintlabel hintlabel_invalid"
-                            };
-                            let radio = html! {
-                                <>
-                                    <input type="checkbox" class="pseudoradio" id="valid" name={guess.clone()} checked=*correct disabled=*correct onchange=self.link.callback(send_judgement(!*correct))/> <label for="valid">{" richtig"}</label>
-                                    <input type="checkbox" class="pseudoradio" id="invalid" name={guess.clone()} checked=!*correct disabled=!*correct onchange=self.link.callback(send_judgement(!*correct))/> <label for="invalid">{" falsch"}</label>
-                                </>
-                            };
-                            html! {
-                                <div class="hintline">
-                                    <div class={hintlabelclass}>
-                                    {guess}
-                                    </div>
-                                    <div>
-                                    {radio}
-                                    </div>
+                common::game::Action::Judge(id, change_correct_to) => match guess {
+                    Some(guess) => {
+                        let flip_judgement = {
+                            let change_correct_to = *change_correct_to;
+                            let id = *id;
+                            move |_: yew::ChangeData| {
+                                Msg::WsSend(common::game::Action::Judge(id, change_correct_to))
+                            }
+                        };
+                        let is_correct = !change_correct_to;
+                        let hintlabelclass = if is_correct {
+                            "hintlabel hintlabel_valid"
+                        } else {
+                            "hintlabel hintlabel_invalid"
+                        };
+                        let radio = html! {
+                            <>
+                                <input type="checkbox" class="pseudoradio" id="valid"
+                                    name={guess.clone()} checked=is_correct disabled=is_correct
+                                    onchange=self.link.callback(flip_judgement)/>
+                                <label for="valid" style="padding-right: 5px;">{" richtig"}</label>
+                                <input type="checkbox" class="pseudoradio" id="invalid"
+                                    name={guess.clone()} checked=!is_correct disabled=!is_correct
+                                    onchange=self.link.callback(flip_judgement)/>
+                                <label for="invalid">{" falsch"}</label>
+                            </>
+                        };
+                        html! {
+                            <div class="hintline">
+                                <div class={hintlabelclass}>
+                                {guess}
                                 </div>
-                            }
-                        }
-                        None => {
-                            eprintln!("judging action but there is no guess");
-                            html! {
-                                <></>
-                            }
+                                <div>
+                                {radio}
+                                </div>
+                            </div>
                         }
                     }
-                }
+                    None => {
+                        eprintln!("judging action but there is no guess");
+                        html! {
+                            <></>
+                        }
+                    }
+                },
                 common::game::Action::FinishJudging(id) => {
                     let id = *id;
                     let send_finish_judging =

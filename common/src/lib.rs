@@ -559,7 +559,8 @@ pub mod game {
                                 let mut actions: Vec<Action> = hints
                                     .iter()
                                     .map(|(_, hint)| {
-                                        Action::FilterHint(id, hint.content.clone(), hint.allowed)
+                                        // note: if the hint is allowed the possible action is to set it to disallowed
+                                        Action::FilterHint(id, hint.content.clone(), !hint.allowed)
                                     })
                                     .collect();
                                 actions.push(Action::FinishHintFiltering(id));
