@@ -420,11 +420,21 @@ pub mod game {
                 GamePhase::Guessing(Guessing { word, hints, guess }) => {
                     if active {
                         *guess = input_guess.clone();
+                        let normalized_guess = guess
+                            .as_ref()
+                            .map(|s| s.to_lowercase())
+                            .unwrap_or("".to_string());
+                        let normalized_word = word.to_lowercase();
+                        let success_default = if normalized_guess == normalized_word {
+                            Some(true)
+                        } else {
+                            None
+                        };
                         self.phase = GamePhase::Judging(Judging {
                             word: word.clone(),
                             hints: hints.clone(),
                             guess: guess.clone(),
-                            success: None,
+                            success: success_default,
                         });
                         Some(())
                     } else {
