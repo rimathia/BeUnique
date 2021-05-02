@@ -163,10 +163,27 @@ impl Component for Model {
                         }
                         _ => Msg::Ignore,
                     };
+                    let hint_exists = match &self.state.phase {
+                        game::VisibleGamePhase::HintCollection(
+                            game::VisibleHintCollection::Inactive(collection),
+                        ) => collection.hint.is_some(),
+                        _ => false,
+                    };
+                    let revoke_hint = if hint_exists {
+                        let another_cloned_id: usize = *id;
+                        html! {
+                            <button onclick=self.link.callback(move |_| Msg::WsSend(common::game::Action::GiveHint(another_cloned_id, None))) class="button deletebutton">
+                            {"Löschen"}
+                            </button>
+                        }
+                    } else {
+                        html! {}
+                    };
                     html! {
                         <div>
                             <label for="hint">{ "Hinweis: " }</label>
                             <input type="text" id="hint" name="hint" autocomplete="off" onchange=self.link.callback(send_hint)/>
+                            {revoke_hint}
                         </div>
                     }
                 }
@@ -453,7 +470,7 @@ impl Component for Model {
             )) => match &hint_collection.hint {
                 Some(hint) => {
                     html! {
-                        { format!("Möchtest du deinen Hinweis \"{}\" für \"{}\" ändern?", hint.content, hint_collection.word) }
+                        { format!("Du gibst den Hinweis \"{}\" für \"{}\".", hint.content, hint_collection.word) }
                     }
                 }
                 None => {

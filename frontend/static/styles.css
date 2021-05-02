@@ -87,6 +87,10 @@ input[type="checkbox"]:disabled + label:before {
 }
 */
 
+.deletebutton {
+  font-size: medium;
+}
+
 .hintbutton {
   font-size: large;
 }
