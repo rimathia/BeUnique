@@ -458,7 +458,8 @@ impl Component for Model {
                 }
                 None => {
                     html! { { format!(
-                        "Bitte gib einen Hinweis für \"{}\".",
+                        "Bitte gib {} einen Hinweis für \"{}\".",
+                        hint_collection.active_player,
                         hint_collection.word)
                     }}
                 }
